@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Beranda — GDSS Rekonstruksi Pascabencana{% endblock %}
+
+{% block content %}
+<main class="max-w-2xl mx-auto px-4 py-10" role="main">
+  <h1 class="text-xl font-semibold text-slate-800 mb-2">
+    Selamat datang, {{ user.nama|default:user.email }}
+  </h1>
+  <p class="text-sm text-slate-500 mb-6">
+    Beranda sesi keputusan tersedia pada Fase 2 pengembangan.
+  </p>
+
+  {# Stub — akan diganti Fase 2 dengan dashboard sesi, badge status, hitung mundur #}
+  <div class="rounded border border-slate-200 bg-white p-6 text-sm text-slate-600">
+    Belum ada sesi aktif. Hubungi Administrator untuk membuat sesi keputusan baru.
+  </div>
+
+  <form method="post" action="{% url 'logout' %}" class="mt-8">
+    {% csrf_token %}
+    <button type="submit"
+            class="px-4 py-2 rounded border border-slate-300 text-sm text-slate-700
+                   hover:bg-slate-50 focus:outline-none focus:ring-2
+                   focus:ring-sky-500 transition-colors">
+      Keluar
+    </button>
+  </form>
+</main>
+{% endblock %}

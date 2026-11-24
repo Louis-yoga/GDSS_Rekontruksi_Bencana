@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50 text-slate-900 antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GDSS Rekonstruksi & Alokasi Bantuan Bencana{% endblock %}</title>
+    <!-- Tailwind CSS (compiled/standalone for responsive ergonomics) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; font-size: 11pt; }
+            .print-full { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-full flex flex-col font-sans">
+    <header class="no-print bg-slate-900 text-white border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded bg-sky-600 font-bold text-white text-sm">
+                    GDSS
+                </span>
+                <div>
+                    <h1 class="text-sm font-semibold tracking-tight leading-tight">Penentuan Lokasi Rekonstruksi</h1>
+                    <p class="text-xs text-slate-400">Sistem Pendukung Keputusan Kelompok</p>
+                </div>
+            </div>
+
+            <nav class="flex items-center space-x-4">
+                {% if user.is_authenticated %}
+                    <div class="text-right hidden sm:block">
+                        <div class="text-xs font-medium text-slate-200">{{ user.nama }}</div>
+                        <div class="text-xs text-sky-400">
+                            {% if user.active_seat %}
+                                Kursi: {{ user.active_seat.nama_jabatan }} ({{ user.active_seat.kode }})
+                            {% else %}
+                                {{ user.get_role_display }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'logout' %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="text-xs px-3 py-1.5 rounded border border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
+                            Keluar
+                        </button>
+                    </form>
+                {% else %}
+                    <span class="text-xs text-slate-400">Silakan masuk dengan akun kursi jabatan</span>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    {% if messages %}
+    <aside aria-label="Notifikasi Sistem" class="no-print max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 w-full">
+        {% for message in messages %}
+            <div class="p-3 mb-2 rounded text-sm {% if message.tags == 'error' %}bg-rose-50 text-rose-800 border border-rose-200{% elif message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% else %}bg-sky-50 text-sky-800 border border-sky-200{% endif %}" role="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </aside>
+    {% endif %}
+
+    <main role="main" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="no-print mt-auto bg-white border-t border-slate-200 text-xs text-slate-500 py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <span>BPBD &copy; 2026 &mdash; Sistem Pendukung Keputusan Kelompok Bencana</span>
+            <span>Prinsip: Human-in-the-Loop &middot; Server-Side Guard &middot; Immutable Audit</span>
+        </div>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
