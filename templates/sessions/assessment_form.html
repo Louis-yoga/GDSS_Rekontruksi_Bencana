@@ -27,13 +27,15 @@
         Formulir Penilaian Lokasi Rekonstruksi
       </h1>
       <p class="text-sm text-slate-600 mt-0.5">
-        {{ sesi.judul }} &bull; Kursi: <span class="font-semibold text-sky-800">{{ seat.nama_jabatan }} ({{ seat.kode }})</span>
+        {{ sesi.judul }} &bull; Kursi: <span class="font-semibold text-sky-800">{{ seat.nama_jabatan }} ({{ seat.kode
+          }})</span>
       </p>
     </div>
 
     {# Status Autosave & Tenggat #}
     <div class="flex items-center space-x-4 text-xs">
-      <div id="autosave-status" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 border border-slate-200" aria-live="polite">
+      <div id="autosave-status" class="px-3 py-1.5 rounded bg-slate-100 text-slate-700 border border-slate-200"
+        aria-live="polite">
         Semua perubahan tersimpan
       </div>
       {% if sesi.deadline_aktif %}
@@ -48,7 +50,8 @@
   {% if assessment.status == 'SUBMITTED' %}
   <div class="mb-6 rounded border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900" role="alert">
     <div class="font-semibold mb-1">Penilaian Anda Telah Disubmit</div>
-    <p>Penilaian untuk kursi ini telah dikunci pada {{ assessment.submitted_at|date:"d M Y, H:i" }} WIB. Hubungi Ketua Pelaksana BPBD jika memerlukan pembukaan kunci koreksi.</p>
+    <p>Penilaian untuk kursi ini telah dikunci pada {{ assessment.submitted_at|date:"d M Y, H:i" }} WIB. Hubungi Ketua
+      Pelaksana BPBD jika memerlukan pembukaan kunci koreksi.</p>
   </div>
   {% endif %}
 
@@ -59,7 +62,7 @@
     <p class="mb-2">Semua lokasi wajib dinilai pada seluruh 8 kriteria sebelum penilaian dapat disubmit.</p>
     <ul class="list-disc list-inside text-xs text-red-800 space-y-0.5">
       {% for cell in missing_cells %}
-        <li>Belum diisi: {{ cell }}</li>
+      <li>Belum diisi: {{ cell }}</li>
       {% endfor %}
     </ul>
   </div>
@@ -74,7 +77,8 @@
       {% for cr in criteria %}
       <div class="p-3 bg-slate-50 rounded border border-slate-200">
         <div class="font-bold text-slate-800 mb-1">{{ cr.kode }} - {{ cr.nama }}</div>
-        <div class="text-slate-500 mb-2">Tipe: <span class="font-medium text-slate-700">{{ cr.tipe }}</span> &bull; Bobot: {{ cr.bobot|floatformat:0 }}%</div>
+        <div class="text-slate-500 mb-2">Tipe: <span class="font-medium text-slate-700">{{ cr.tipe }}</span> &bull;
+          Bobot: {{ cr.bobot|floatformat:0 }}%</div>
         <div class="space-y-1 text-slate-600">
           <div><span class="font-semibold text-slate-700">1:</span> {{ cr.anchor_1 }}</div>
           <div><span class="font-semibold text-slate-700">2:</span> {{ cr.anchor_2 }}</div>
@@ -88,12 +92,10 @@
   </details>
 
   {# ─── Matriks Penilaian Interaktif ───────────────────────────── #}
-  <form id="assessment-form"
-        method="post"
-        action="{% url 'submit-assessment' session_id=sesi.id %}"
-        data-submitted="{% if assessment.status == 'SUBMITTED' %}true{% else %}false{% endif %}"
-        data-autosave-url="{% url 'api-autosave-assessment' session_id=sesi.id %}"
-        data-versi-draf="{{ assessment.versi_draf|default:1 }}">
+  <form id="assessment-form" method="post" action="{% url 'submit-assessment' session_id=sesi.id %}"
+    data-submitted="{% if assessment.status == 'SUBMITTED' %}true{% else %}false{% endif %}"
+    data-autosave-url="{% url 'api-autosave-assessment' session_id=sesi.id %}"
+    data-versi-draf="{{ assessment.versi_draf|default:1 }}">
     {% csrf_token %}
     <input type="hidden" name="idempotency_token" value="{{ idempotency_token }}">
 
@@ -107,8 +109,10 @@
             {% for cr in criteria %}
             <th class="p-3 text-center min-w-[130px] border-r border-slate-200">
               <div class="font-bold text-slate-800">{{ cr.kode }}</div>
-              <div class="text-[11px] text-slate-500 font-normal truncate max-w-[120px]" title="{{ cr.nama }}">{{ cr.nama }}</div>
-              <span class="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {% if cr.tipe == 'COST' %}bg-rose-100 text-rose-800{% else %}bg-sky-100 text-sky-800{% endif %}">
+              <div class="text-[11px] text-slate-500 font-normal truncate max-w-[120px]" title="{{ cr.nama }}">{{
+                cr.nama }}</div>
+              <span
+                class="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {% if cr.tipe == 'COST' %}bg-rose-100 text-rose-800{% else %}bg-sky-100 text-sky-800{% endif %}">
                 {{ cr.tipe }} ({{ cr.bobot|floatformat:0 }}%)
               </span>
             </th>
@@ -129,11 +133,9 @@
             {% for cr in criteria %}
             {% get_score score_dict loc.id cr.id as current_score %}
             <td class="p-2 text-center border-r border-slate-200">
-              <select name="score_{{ loc.id }}_{{ cr.id }}"
-                      data-loc="{{ loc.id }}"
-                      data-crit="{{ cr.id }}"
-                      class="score-input w-16 text-center font-semibold rounded border border-slate-300 py-1.5 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none transition-colors {% if assessment.status == 'SUBMITTED' %}bg-slate-100 text-slate-500 cursor-not-allowed{% endif %}"
-                      {% if assessment.status == 'SUBMITTED' %}disabled{% endif %}>
+              <select name="score_{{ loc.id }}_{{ cr.id }}" data-loc="{{ loc.id }}" data-crit="{{ cr.id }}"
+                class="score-input w-16 text-center font-semibold rounded border border-slate-300 py-1.5 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none transition-colors {% if assessment.status == 'SUBMITTED' %}bg-slate-100 text-slate-500 cursor-not-allowed{% endif %}"
+                {% if assessment.status == 'SUBMITTED' %}disabled{% endif %}>
                 <option value="">-</option>
                 <option value="1" {% if current_score == 1 %}selected{% endif %}>1</option>
                 <option value="2" {% if current_score == 2 %}selected{% endif %}>2</option>
@@ -151,7 +153,8 @@
 
     {# ─── Panel Konfirmasi & Submit ─────────────────────────────── #}
     {% if assessment.status != 'SUBMITTED' %}
-    <div class="bg-white rounded-lg border border-slate-200 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div
+      class="bg-white rounded-lg border border-slate-200 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
         <h3 class="text-sm font-semibold text-slate-900">Konfirmasi Penyerahan Penilaian</h3>
         <p class="text-xs text-slate-500 mt-0.5">
@@ -160,16 +163,12 @@
       </div>
 
       <div class="flex items-center space-x-3">
-        <input type="password"
-               name="password_konfirmasi"
-               required
-               placeholder="Kata sandi konfirmasi"
-               class="px-3 py-2 text-xs rounded border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-               autocomplete="current-password">
+        <input type="password" name="password_konfirmasi" required placeholder="Kata sandi konfirmasi"
+          class="px-3 py-2 text-xs rounded border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+          autocomplete="current-password">
 
-        <button type="submit"
-                id="submit-btn"
-                class="px-5 py-2 text-xs font-semibold rounded bg-sky-700 text-white hover:bg-sky-800 focus:ring-2 focus:ring-sky-500 focus:outline-none transition-colors">
+        <button type="submit" id="submit-btn"
+          class="px-5 py-2 text-xs font-semibold rounded bg-sky-700 text-white hover:bg-sky-800 focus:ring-2 focus:ring-sky-500 focus:outline-none transition-colors">
           Submit Penilaian
         </button>
       </div>
@@ -180,75 +179,75 @@
 
 {# ─── Script Debounce Autosave (2 detik) ────────────────────────── #}
 <script>
-(function() {
-  'use strict';
-  const formEl = document.getElementById('assessment-form');
-  if (!formEl) return;
+  (function () {
+    'use strict';
+    const formEl = document.getElementById('assessment-form');
+    if (!formEl) return;
 
-  const isSubmitted = formEl.dataset.submitted === 'true';
-  if (isSubmitted) return;
+    const isSubmitted = formEl.dataset.submitted === 'true';
+    if (isSubmitted) return;
 
-  const autosaveUrl = formEl.dataset.autosaveUrl;
-  let versiDraf = parseInt(formEl.dataset.versiDraf, 10) || 1;
-  const statusEl = document.getElementById('autosave-status');
-  let saveTimer = null;
+    const autosaveUrl = formEl.dataset.autosaveUrl;
+    let versiDraf = parseInt(formEl.dataset.versiDraf, 10) || 1;
+    const statusEl = document.getElementById('autosave-status');
+    let saveTimer = null;
 
-  function triggerAutosave() {
-    clearTimeout(saveTimer);
-    statusEl.textContent = 'Menyimpan perubahan…';
-    statusEl.className = 'px-3 py-1.5 rounded bg-amber-50 text-amber-800 border border-amber-200';
+    function triggerAutosave() {
+      clearTimeout(saveTimer);
+      statusEl.textContent = 'Menyimpan perubahan…';
+      statusEl.className = 'px-3 py-1.5 rounded bg-amber-50 text-amber-800 border border-amber-200';
 
-    saveTimer = setTimeout(function() {
-      const inputs = document.querySelectorAll('.score-input');
-      const scores = [];
+      saveTimer = setTimeout(function () {
+        const inputs = document.querySelectorAll('.score-input');
+        const scores = [];
 
-      inputs.forEach(inp => {
-        const val = parseInt(inp.value, 10);
-        if (!isNaN(val) && val >= 1 && val <= 5) {
-          scores.push({
-            lokasi_id: parseInt(inp.dataset.loc, 10),
-            kriteria_id: parseInt(inp.dataset.crit, 10),
-            skor: val
-          });
-        }
-      });
+        inputs.forEach(inp => {
+          const val = parseInt(inp.value, 10);
+          if (!isNaN(val) && val >= 1 && val <= 5) {
+            scores.push({
+              lokasi_id: parseInt(inp.dataset.loc, 10),
+              kriteria_id: parseInt(inp.dataset.crit, 10),
+              skor: val
+            });
+          }
+        });
 
-      fetch(autosaveUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        body: JSON.stringify({
-          versi_draf: versiDraf,
-          scores: scores
+        fetch(autosaveUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            versi_draf: versiDraf,
+            scores: scores
+          })
         })
-      })
-      .then(res => {
-        if (res.status === 409) {
-          statusEl.textContent = 'Konflik versi draf. Harap refresh halaman.';
-          statusEl.className = 'px-3 py-1.5 rounded bg-red-100 text-red-800 border border-red-300';
-          return null;
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data && data.status === 'ok') {
-          versiDraf = data.versi_draf;
-          statusEl.textContent = `Tersimpan otomatis pukul ${data.saved_at}`;
-          statusEl.className = 'px-3 py-1.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200';
-        }
-      })
-      .catch(err => {
-        statusEl.textContent = 'Gagal menyimpan draf';
-        statusEl.className = 'px-3 py-1.5 rounded bg-red-50 text-red-800 border border-red-200';
-      });
-    }, 2000); // Debounce 2 detik
-  }
+          .then(res => {
+            if (res.status === 409) {
+              statusEl.textContent = 'Konflik versi draf. Harap refresh halaman.';
+              statusEl.className = 'px-3 py-1.5 rounded bg-red-100 text-red-800 border border-red-300';
+              return null;
+            }
+            return res.json();
+          })
+          .then(data => {
+            if (data && data.status === 'ok') {
+              versiDraf = data.versi_draf;
+              statusEl.textContent = `Tersimpan otomatis pukul ${data.saved_at}`;
+              statusEl.className = 'px-3 py-1.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200';
+            }
+          })
+          .catch(err => {
+            statusEl.textContent = 'Gagal menyimpan draf';
+            statusEl.className = 'px-3 py-1.5 rounded bg-red-50 text-red-800 border border-red-200';
+          });
+      }, 2000); // Debounce 2 detik
+    }
 
-  document.querySelectorAll('.score-input').forEach(inp => {
-    inp.addEventListener('change', triggerAutosave);
-  });
-})();
+    document.querySelectorAll('.score-input').forEach(inp => {
+      inp.addEventListener('change', triggerAutosave);
+    });
+  })();
 </script>
 {% endblock %}
