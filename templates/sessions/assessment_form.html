@@ -103,7 +103,7 @@
             <th class="p-3 text-center min-w-[130px] border-r border-slate-200">
               <div class="font-bold text-slate-800">{{ cr.kode }}</div>
               <div class="text-[11px] text-slate-500 font-normal truncate max-w-[120px]" title="{{ cr.nama }}">{{ cr.nama }}</div>
-              <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-medium {% if cr.tipe == 'COST' %}bg-rose-100 text-rose-800{% else %}bg-sky-100 text-sky-800{% endif %}">
+              <span class="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {% if cr.tipe == 'COST' %}bg-rose-100 text-rose-800{% else %}bg-sky-100 text-sky-800{% endif %}">
                 {{ cr.tipe }} ({{ cr.bobot|floatformat:0 }}%)
               </span>
             </th>
@@ -177,11 +177,11 @@
 <script>
 (function() {
   'use strict';
-  const isSubmitted = {{ assessment.status|yesno:"true,false" }};
+  const isSubmitted = {% if assessment.status == 'SUBMITTED' %}true{% else %}false{% endif %};
   if (isSubmitted) return;
 
-  const sessionId = {{ sesi.id }};
-  let versiDraf = {{ assessment.versi_draf }};
+  const autosaveUrl = "{% url 'api-autosave-assessment' session_id=sesi.id %}";
+  let versiDraf = {{ assessment.versi_draf|default:1 }};
   const statusEl = document.getElementById('autosave-status');
   let saveTimer = null;
 
@@ -205,7 +205,7 @@
         }
       });
 
-      fetch(`/sessions/api/${sessionId}/assessments/draft/`, {
+      fetch(autosaveUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

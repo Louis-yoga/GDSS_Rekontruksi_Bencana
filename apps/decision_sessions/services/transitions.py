@@ -254,3 +254,147 @@ def unlock_assessment(
             'new_versi_draf': assessment.versi_draf,
         }
     )
+
+
+@transaction.atomic
+def transition_t3_open_voting(sesi: SesiKeputusan, user, request=None) -> None:
+    """
+    Transisi T3: HASIL_AWAL -> VOTING
+    Guard:
+    - Status sesi saat ini adalah HASIL_AWAL
+    - Pengguna adalah pemegang kursi KETUA
+    """
+    if sesi.status != 'HASIL_AWAL':
+        raise ValidationError(f"Sesi tidak dapat dibuka untuk voting: status saat ini {sesi.status}")
+
+    active_seat = getattr(user, 'active_seat', None)
+    if not active_seat or active_seat.kode != 'KETUA':
+        raise PermissionDenied("Hanya Ketua BPBD yang berwenang membuka sesi voting.")
+
+    now = timezone.now()
+    sesi.status = 'VOTING'
+    sesi.deadline_aktif = now + timezone.timedelta(minutes=sesi.durasi_t2_menit)
+    sesi.save(update_fields=['status', 'deadline_aktif', 'updated_at'])
+
+    EventLog.objects.create(
+        sesi=sesi,
+        user=user,
+        seat_kode='KETUA',
+        aksi='STATE_T3',
+        status_dari='HASIL_AWAL',
+        status_ke='VOTING',
+        ip_address=_get_client_ip(request),
+        user_agent=_get_user_agent(request),
+        detail={
+            'deadline_aktif': sesi.deadline_aktif.isoformat(),
+            'durasi_menit': sesi.durasi_t2_menit,
+        }
+    )
+
+
+@transaction.atomic
+def transition_t4a_auto(sesi: SesiKeputusan, request=None) -> bool:
+    """
+    Transisi T4-A: VOTING -> PENETAPAN (Otomatis saat 3/3 kursi DM telah memberikan suara)
+    """
+    if sesi.status != 'VOTING':
+        return False
+
+    votes_count = sesi.votes.count()
+    if votes_count < 3:
+        return False
+
+    from apps.decision_sessions.services.borda_engine import execute_borda_and_ranking
+    execute_borda_and_ranking(sesi)
+
+    sesi.status = 'PENETAPAN'
+    sesi.kuorum_parsial = False
+    sesi.save(update_fields=['status', 'kuorum_parsial', 'updated_at'])
+
+    EventLog.objects.create(
+        sesi=sesi,
+        user=None,
+        seat_kode=None,
+        aksi='STATE_T4_AUTO',
+        status_dari='VOTING',
+        status_ke='PENETAPAN',
+        ip_address=_get_client_ip(request),
+        user_agent=_get_user_agent(request),
+        detail={'votes_count': 3, 'mode': 'kuorum_lengkap'}
+    )
+    return True
+
+
+@transaction.atomic
+def transition_t4b_force_close_voting(
+    sesi: SesiKeputusan,
+    user,
+    alasan: str,
+    password_konfirmasi: str,
+    request=None
+) -> None:
+    """
+    Transisi T4-B: Tutup Paksa Voting (AC-10)
+    Guard:
+    - Status sesi saat ini adalah VOTING
+    - Pengguna adalah pemegang kursi KETUA
+    - now() > deadline_aktif (AC-10: DILARANG tutup voting sebelum tenggat waktu terlewati)
+    - Suara masuk >= 2 (Kuorum minimal 2/3)
+    - KETUA wajib sudah memberikan suara
+    - Alasan minimal 20 karakter
+    - Kata sandi konfirmasi valid
+    """
+    if sesi.status != 'VOTING':
+        raise ValidationError(f"Sesi tidak dapat ditutup: status saat ini {sesi.status}")
+
+    active_seat = getattr(user, 'active_seat', None)
+    if not active_seat or active_seat.kode != 'KETUA':
+        raise PermissionDenied("Hanya Ketua BPBD yang berwenang menutup paksa voting.")
+
+    if not user.check_password(password_konfirmasi):
+        raise ValidationError("Kata sandi konfirmasi tidak valid.")
+
+    if not alasan or len(alasan.strip()) < 20:
+        raise ValidationError("Alasan penutupan paksa voting wajib diisi minimal 20 karakter.")
+
+    now = timezone.now()
+    if sesi.deadline_aktif and now <= sesi.deadline_aktif:
+        raise PermissionDenied(
+            "Larangan AC-10: Voting tidak dapat ditutup sebelum batas waktu/deadline berakhir."
+        )
+
+    votes = sesi.votes.all()
+    if votes.count() < 2:
+        raise PermissionDenied(
+            f"Kuorum 2/3 tidak terpenuhi: Hanya {votes.count()} suara yang masuk. Minimal 2 suara diperlukan."
+        )
+
+    ketua_voted = votes.filter(seat__kode='KETUA').exists()
+    if not ketua_voted:
+        raise PermissionDenied(
+            "Ketua BPBD wajib sudah memberikan suara sebelum melakukan penutupan paksa voting."
+        )
+
+    from apps.decision_sessions.services.borda_engine import execute_borda_and_ranking
+    execute_borda_and_ranking(sesi)
+
+    sesi.status = 'PENETAPAN'
+    sesi.kuorum_parsial = True
+    sesi.alasan_status = alasan.strip()
+    sesi.save(update_fields=['status', 'kuorum_parsial', 'alasan_status', 'updated_at'])
+
+    EventLog.objects.create(
+        sesi=sesi,
+        user=user,
+        seat_kode='KETUA',
+        aksi='STATE_T4_FORCE',
+        status_dari='VOTING',
+        status_ke='PENETAPAN',
+        ip_address=_get_client_ip(request),
+        user_agent=_get_user_agent(request),
+        detail={
+            'votes_count': votes.count(),
+            'alasan': alasan.strip(),
+            'kuorum_parsial': True,
+        }
+    )

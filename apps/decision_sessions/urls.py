@@ -19,4 +19,14 @@ urlpatterns = [
     # Transisi T2-B: Tutup Paksa Penilaian (Kuorum 2/3) & Buka Kunci
     path('<int:session_id>/close-assessment/', views.force_close_assessment_view, name='close-assessment'),
     path('<int:session_id>/assessments/<str:seat_code>/unlock/', views.unlock_assessment_view, name='unlock-assessment'),
+
+    # Transisi T3: Buka Sesi Voting Borda
+    path('<int:session_id>/open-voting/', views.open_voting_view, name='open-voting'),
+
+    # L6 — Ruang Konsensus / Voting Borda
+    path('<int:session_id>/voting/', views.voting_view, name='voting-view'),
+    path('<int:session_id>/votes/submit/', views.submit_vote_view, name='submit-vote'),
+
+    # Transisi T4-B: Tutup Paksa Voting (AC-10)
+    path('<int:session_id>/close-voting/', views.force_close_voting_view, name='close-voting'),
 ]

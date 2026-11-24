@@ -21,13 +21,16 @@ from django.core.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.rbac import requires_seat, requires_any_dm
 from apps.decision_sessions.models import (
-    SesiKeputusan, Location, Criteria, Assessment, AssessmentScore, Result
+    SesiKeputusan, Location, Criteria, Assessment, AssessmentScore, Result, Vote, VoteItem
 )
 from apps.decision_sessions.services.transitions import (
     transition_t1_open_assessment,
     transition_t2a_auto,
     transition_t2b_force_close,
-    unlock_assessment
+    unlock_assessment,
+    transition_t3_open_voting,
+    transition_t4a_auto,
+    transition_t4b_force_close_voting
 )
 from apps.decision_sessions.services.wp_engine import (
     normalize_weights,
@@ -358,3 +361,177 @@ def unlock_assessment_view(request, session_id, seat_code):
     except (ValidationError, PermissionDenied) as e:
         messages.error(request, str(e))
     return redirect('session-list')
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def open_voting_view(request, session_id):
+    """Transisi T3: Buka Sesi Konsensus / Voting Borda (HASIL_AWAL -> VOTING)"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    try:
+        transition_t3_open_voting(sesi, request.user, request)
+        messages.success(request, f"Sesi voting untuk '{sesi.judul}' berhasil dibuka.")
+        return redirect('voting-view', session_id=sesi.id)
+    except (ValidationError, PermissionDenied) as e:
+        messages.error(request, str(e))
+        return redirect('session-list')
+
+
+@require_http_methods(['GET'])
+@requires_seat('KETUA', 'PU', 'SOSIAL')
+def voting_view(request, session_id):
+    """
+    L6 — Ruang Konsensus / Voting Borda
+    - Formulir pemilihan urutan peringkat 1 s.d. K
+    - Default formulir kosong (anti-bias)
+    - Tombol bantu: 1-klik salin rekomendasi WP
+    - Opsi Abstain
+    - Sealed ballot: DM lain tidak dapat melihat pilihan kursi ini sebelum FINAL (Zona 5)
+    """
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    if sesi.status not in ['VOTING', 'PENETAPAN', 'FINAL']:
+        messages.warning(request, f"Sesi saat ini berstatus {sesi.status}, bukan tahap VOTING.")
+        return redirect('session-list')
+
+    seat = request.user.active_seat
+    my_vote = Vote.objects.filter(sesi=sesi, seat=seat).first()
+
+    # Daftar kandidat lokasi dan rekomendasi WP
+    locations = sesi.locations.all().order_by('id')
+    wp_results = Result.objects.filter(sesi=sesi).select_related('lokasi').order_by('rank_wp')
+
+    # Buat token idempotency (AC-05)
+    token_key = f'idempotency_token_vote_{sesi.id}'
+    idempotency_token = secrets.token_hex(16)
+    request.session[token_key] = idempotency_token
+
+    # Ambil pilihan jika sudah pernah memilih
+    selected_rank_map = {}
+    if my_vote and not my_vote.abstain:
+        for it in my_vote.items.all():
+            selected_rank_map[it.peringkat] = it.lokasi_id
+
+    # Siapkan range K untuk dropdown peringkat (1 s.d. K)
+    k_range = list(range(1, sesi.nilai_k + 1))
+
+    return render(request, 'sessions/voting_form.html', {
+        'sesi': sesi,
+        'seat': seat,
+        'my_vote': my_vote,
+        'locations': locations,
+        'wp_results': wp_results,
+        'idempotency_token': idempotency_token,
+        'selected_rank_map': selected_rank_map,
+        'k_range': k_range,
+    })
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA', 'PU', 'SOSIAL')
+def submit_vote_view(request, session_id):
+    """
+    Submit Surat Suara Voting Borda (AC-05, AC-01)
+    - Idempotency token check (mencegah double-click / submit berulang)
+    - Verifikasi kata sandi konfirmasi
+    - Opsi Abstain vs Pilihan Tepat K lokasi unik
+    - Auto-transisi T4-A bila seluruh 3 DM telah memberikan suara
+    """
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    if sesi.status != 'VOTING':
+        return HttpResponseBadRequest("Sesi tidak dalam tahap VOTING.")
+
+    seat = request.user.active_seat
+
+    # Cek apakah sudah pernah vote (Idempotency AC-05)
+    if Vote.objects.filter(sesi=sesi, seat=seat).exists():
+        messages.info(request, "Suara Anda sudah tercatat sebelumnya.")
+        return redirect('voting-view', session_id=sesi.id)
+
+    # Validasi idempotency token
+    token_key = f'idempotency_token_vote_{sesi.id}'
+    submitted_token = request.POST.get('idempotency_token')
+    session_token = request.session.pop(token_key, None)
+
+    if not submitted_token or submitted_token != session_token:
+        # Jika token hilang atau tidak cocok (misal klik beruntun), abaikan request duplikat
+        messages.warning(request, "Permintaan duplikat terdeteksi. Suara Anda sedang diproses.")
+        return redirect('voting-view', session_id=sesi.id)
+
+    # Validasi kata sandi
+    password = request.POST.get('password_konfirmasi', '')
+    if not request.user.check_password(password):
+        messages.error(request, "Kata sandi konfirmasi tidak valid.")
+        return redirect('voting-view', session_id=sesi.id)
+
+    is_abstain = request.POST.get('abstain') == 'true'
+
+    if is_abstain:
+        Vote.objects.create(
+            sesi=sesi,
+            seat=seat,
+            user=request.user,
+            abstain=True
+        )
+    else:
+        k = sesi.nilai_k
+        chosen_loc_ids = []
+        for r in range(1, k + 1):
+            val = request.POST.get(f'rank_{r}')
+            if not val or not val.isdigit():
+                messages.error(request, f"Peringkat ke-{r} wajib dipilih.")
+                return redirect('voting-view', session_id=sesi.id)
+            loc_id = int(val)
+            if loc_id in chosen_loc_ids:
+                messages.error(request, "Setiap lokasi hanya boleh dipilih pada satu peringkat (dilarang duplikat).")
+                return redirect('voting-view', session_id=sesi.id)
+            chosen_loc_ids.append(loc_id)
+
+        # Buat objek Vote dan VoteItem
+        vote = Vote.objects.create(
+            sesi=sesi,
+            seat=seat,
+            user=request.user,
+            abstain=False
+        )
+        for r, loc_id in enumerate(chosen_loc_ids, start=1):
+            VoteItem.objects.create(
+                vote=vote,
+                peringkat=r,
+                lokasi_id=loc_id
+            )
+
+    EventLog.objects.create(
+        sesi=sesi,
+        user=request.user,
+        seat_kode=seat.kode,
+        aksi='VOTE_SUBMITTED',
+        ip_address=_get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', '')[:255],
+        detail={'abstain': is_abstain}
+    )
+
+    # Cek auto-transisi T4-A bila semua kursi telah memberikan suara
+    transitioned = transition_t4a_auto(sesi, request)
+    if transitioned:
+        messages.success(request, "Seluruh kursi telah memilih! Sesi beralih otomatis ke tahap PENETAPAN.")
+        return redirect('session-list')
+
+    messages.success(request, "Surat suara Anda berhasil dikirim dan disegel.")
+    return redirect('voting-view', session_id=sesi.id)
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def force_close_voting_view(request, session_id):
+    """Transisi T4-B: Tutup Paksa Voting (AC-10)"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    alasan = request.POST.get('alasan', '')
+    password = request.POST.get('password_konfirmasi', '')
+
+    try:
+        transition_t4b_force_close_voting(sesi, request.user, alasan, password, request)
+        messages.success(request, "Voting berhasil ditutup paksa. Sesi beralih ke tahap PENETAPAN.")
+        return redirect('session-list')
+    except (ValidationError, PermissionDenied) as e:
+        messages.error(request, str(e))
+        return redirect('session-list')
