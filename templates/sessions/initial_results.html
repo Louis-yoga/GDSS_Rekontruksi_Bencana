@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Hasil Awal & Divergensi — {{ sesi.judul }}{% endblock %}
+
+{% block content %}
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+
+  {# ─── Breadcrumb & Header ────────────────────────────────────── #}
+  <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
+    <div>
+      <div class="flex items-center space-x-2 text-xs text-slate-500 mb-1">
+        <a href="{% url 'session-list' %}" class="hover:underline">Beranda Sesi</a>
+        <span>/</span>
+        <span>Hasil Awal & Divergensi</span>
+      </div>
+      <h1 class="text-xl font-bold text-slate-900 leading-tight">
+        Hasil Rekomendasi Weighted Product & Analisis Divergensi
+      </h1>
+      <p class="text-sm text-slate-600 mt-0.5">
+        {{ sesi.judul }} &bull; Status: <span class="font-semibold text-sky-800">{{ sesi.get_status_display }}</span>
+      </p>
+    </div>
+
+    {# Divergence Badge #}
+    <div class="flex items-center space-x-3">
+      {% if divergence == 'RENDAH' %}
+      <div class="px-3.5 py-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
+        <span>Divergensi Rendah (Konsensus Kuat)</span>
+      </div>
+      {% elif divergence == 'SEDANG' %}
+      <div class="px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-xs font-semibold flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-amber-600 inline-block"></span>
+        <span>Divergensi Sedang (2 dari 3 DM Sepakat Top-1)</span>
+      </div>
+      {% else %}
+      <div class="px-3.5 py-1.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 text-xs font-semibold flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-rose-600 inline-block"></span>
+        <span>Divergensi Tinggi (Prioritas Sektoral Berbeda)</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ─── Kuorum Alert jika Kuorum Parsial ───────────────────────── #}
+  {% if sesi.kuorum_parsial %}
+  <div class="mb-6 rounded border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
+    <div class="font-semibold text-sm mb-1">Peringatan: Keputusan Berdasarkan Kuorum Parsial (2/3 Kursi)</div>
+    <p>Penilaian ditutup paksa melewati batas waktu. Alasan: <em>"{{ sesi.alasan_status }}"</em></p>
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    {# ─── Kolom Kiri: Tabel Peringkat Kelompok WP ──────────────── #}
+    <div class="lg:col-span-2">
+      <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-6">
+        <div class="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800">Peringkat Rekomendasi Kelompok (Weighted Product)</h2>
+            <p class="text-xs text-slate-500">Agregasi Rata-rata Geometrik dari seluruh DM yang berpartisipasi</p>
+          </div>
+          <span class="text-xs font-medium text-slate-500">Top-{{ sesi.nilai_k }} Prioritas</span>
+        </div>
+
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 text-xs border-b border-slate-200">
+              <th class="py-2.5 px-4 font-semibold w-16 text-center">Peringkat</th>
+              <th class="py-2.5 px-4 font-semibold">Kode & Nama Lokasi</th>
+              <th class="py-2.5 px-4 font-semibold">Wilayah</th>
+              <th class="py-2.5 px-4 font-semibold text-right">Nilai Preferensi (V)</th>
+              <th class="py-2.5 px-4 font-semibold text-center">Status Rekomendasi</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for r in results %}
+            <tr class="{% if r.rank_wp <= sesi.nilai_k %}bg-sky-50/50{% else %}hover:bg-slate-50{% endif %} transition-colors">
+              <td class="py-3 px-4 font-bold text-center {% if r.rank_wp <= sesi.nilai_k %}text-sky-800{% else %}text-slate-500{% endif %}">
+                #{{ r.rank_wp }}
+              </td>
+              <td class="py-3 px-4">
+                <div class="font-semibold text-slate-900">{{ r.lokasi.kode }}</div>
+                <div class="text-xs text-slate-600">{{ r.lokasi.nama }}</div>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">
+                {{ r.lokasi.wilayah }}
+              </td>
+              <td class="py-3 px-4 text-right font-mono text-xs font-semibold text-slate-800">
+                {{ r.skor_wp|floatformat:6 }}
+              </td>
+              <td class="py-3 px-4 text-center">
+                {% if r.rank_wp <= sesi.nilai_k %}
+                <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-100 text-sky-800 border border-sky-200">
+                  Kandidat Top-{{ sesi.nilai_k }}
+                </span>
+                {% else %}
+                <span class="inline-block px-2 py-0.5 rounded text-[11px] font-normal text-slate-400">
+                  Alternatif Lain
+                </span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="py-6 text-center text-xs text-slate-500">
+                Belum ada kalkulasi hasil yang tersimpan.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# ─── Tombol Navigasi Lanjut (Khusus Ketua) ─────────────── #}
+      {% if user_seat.kode == 'KETUA' %}
+      <div class="bg-white rounded-lg border border-slate-200 p-5 shadow-sm flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">Langkah Berikutnya: Konsensus & Voting Borda</h3>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Buka sesi voting agar ketiga pembuat keputusan dapat memilih Top-{{ sesi.nilai_k }} lokasi.
+          </p>
+        </div>
+        <a href="{% url 'session-list' %}"
+           class="px-5 py-2.5 rounded bg-sky-700 text-white text-xs font-semibold hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors">
+          Kembali ke Beranda Sesi
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ─── Kolom Kanan: Peringkat Sektoral Masing-Masing Kursi (Blind Scoring) #}
+    <div class="space-y-6">
+      <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-5">
+        <h2 class="text-sm font-bold text-slate-800 mb-1">Prioritas Sektoral Per Kursi</h2>
+        <p class="text-xs text-slate-500 mb-4">
+          Urutan prioritas berdasarkan skor masing-masing kursi (tanpa menampilkan angka skor mentah).
+        </p>
+
+        <div class="space-y-4">
+          {% for seat_code, rank_list in individual_rankings.items %}
+          <div class="p-3.5 rounded border border-slate-200 bg-slate-50">
+            <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-200">
+              <span class="font-bold text-xs text-slate-800">Kursi {{ seat_code }}</span>
+              <span class="text-[11px] text-slate-500">Top-1: <strong>{{ rank_list.0.lokasi.kode }}</strong></span>
+            </div>
+            <ol class="space-y-1 text-xs text-slate-700">
+              {% for item in rank_list %}
+              <li class="flex items-center justify-between">
+                <span>{{ item.rank }}. {{ item.lokasi.nama }}</span>
+                <span class="font-mono text-[11px] text-slate-400">{{ item.lokasi.kode }}</span>
+              </li>
+              {% endfor %}
+            </ol>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}

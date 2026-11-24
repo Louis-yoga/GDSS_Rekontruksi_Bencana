@@ -1,28 +1,133 @@
 {% extends "base.html" %}
-{% block title %}Beranda — GDSS Rekonstruksi Pascabencana{% endblock %}
+{% block title %}Beranda Sesi Keputusan — GDSS Rekonstruksi Pascabencana{% endblock %}
 
 {% block content %}
-<main class="max-w-2xl mx-auto px-4 py-10" role="main">
-  <h1 class="text-xl font-semibold text-slate-800 mb-2">
-    Selamat datang, {{ user.nama|default:user.email }}
-  </h1>
-  <p class="text-sm text-slate-500 mb-6">
-    Beranda sesi keputusan tersedia pada Fase 2 pengembangan.
-  </p>
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
 
-  {# Stub — akan diganti Fase 2 dengan dashboard sesi, badge status, hitung mundur #}
-  <div class="rounded border border-slate-200 bg-white p-6 text-sm text-slate-600">
-    Belum ada sesi aktif. Hubungi Administrator untuk membuat sesi keputusan baru.
+  {# ─── Header Beranda ────────────────────────────────────────── #}
+  <div class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900 leading-tight">
+        Daftar Sesi Pengambilan Keputusan
+      </h1>
+      <p class="text-sm text-slate-500 mt-0.5">
+        Pengguna: <strong class="text-slate-800">{{ user.nama }}</strong> &bull; Peran:
+        {% if active_seat %}
+          <span class="text-sky-800 font-semibold">{{ active_seat.nama_jabatan }} ({{ active_seat.kode }})</span>
+        {% else %}
+          <span class="text-slate-700 font-semibold">{{ user.get_role_display }}</span>
+        {% endif %}
+      </p>
+    </div>
   </div>
 
-  <form method="post" action="{% url 'logout' %}" class="mt-8">
-    {% csrf_token %}
-    <button type="submit"
-            class="px-4 py-2 rounded border border-slate-300 text-sm text-slate-700
-                   hover:bg-slate-50 focus:outline-none focus:ring-2
-                   focus:ring-sky-500 transition-colors">
-      Keluar
-    </button>
-  </form>
+  {# ─── Flash Messages ─────────────────────────────────────────── #}
+  {% if messages %}
+  <div class="space-y-2 mb-6">
+    {% for msg in messages %}
+    <div class="p-3.5 rounded text-xs sm:text-sm border {% if msg.tags == 'error' %}bg-red-50 text-red-800 border-red-200{% elif msg.tags == 'success' %}bg-emerald-50 text-emerald-800 border-emerald-200{% else %}bg-sky-50 text-sky-800 border-sky-200{% endif %}" role="alert">
+      {{ msg }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ─── Daftar Sesi Keputusan ─────────────────────────────────── #}
+  <div class="space-y-6">
+    {% for item in sessions_data %}
+    {% with s=item.sesi %}
+    <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-3 mb-1.5">
+            <h2 class="text-base font-bold text-slate-900">{{ s.judul }}</h2>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+              {% if s.status == 'DRAFT' %}bg-slate-100 text-slate-700 border border-slate-300
+              {% elif s.status == 'PENILAIAN' %}bg-sky-100 text-sky-800 border border-sky-300
+              {% elif s.status == 'HASIL_AWAL' %}bg-amber-100 text-amber-800 border border-amber-300
+              {% elif s.status == 'VOTING' %}bg-indigo-100 text-indigo-800 border border-indigo-300
+              {% elif s.status == 'PENETAPAN' %}bg-purple-100 text-purple-800 border border-purple-300
+              {% elif s.status == 'FINAL' %}bg-emerald-100 text-emerald-800 border border-emerald-300
+              {% else %}bg-slate-100 text-slate-600{% endif %}">
+              {{ s.get_status_display }}
+            </span>
+            <span class="text-xs text-slate-400 font-medium">Versi {{ s.versi }}</span>
+          </div>
+          <p class="text-xs text-slate-500">
+            Alokasi Rekonstruksi: <strong>Top-{{ s.nilai_k }} Lokasi Prioritas</strong> &bull;
+            {% if s.deadline_aktif %}
+              Batas Waktu: <strong>{{ s.deadline_aktif|date:"d M Y, H:i" }} WIB</strong>
+            {% else %}
+              Durasi Penilaian: <strong>{{ s.durasi_t1_menit }} menit</strong>
+            {% endif %}
+          </p>
+        </div>
+
+        {# Progres Partisipasi Kursi DM #}
+        <div class="flex items-center space-x-2 text-xs">
+          <span class="text-slate-500">Partisipasi Penilaian:</span>
+          <span class="px-2 py-0.5 rounded font-semibold {% if item.submitted_dm_count == 3 %}bg-emerald-100 text-emerald-800{% else %}bg-slate-100 text-slate-700{% endif %}">
+            {{ item.submitted_dm_count }} / 3 Kursi
+          </span>
+        </div>
+      </div>
+
+      {# ─── Baris Tombol Aksi Kontekstual ───────────────────────── #}
+      <div class="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div class="text-xs text-slate-500">
+          {% if s.status == 'DRAFT' %}
+            Sesi sedang disiapkan. Menunggu Ketua BPBD membuka tahap penilaian.
+          {% elif s.status == 'PENILAIAN' %}
+            {% if item.my_assessment and item.my_assessment.status == 'SUBMITTED' %}
+              <span class="text-emerald-700 font-medium">✓ Penilaian Anda telah diserahkan (dikunci).</span>
+            {% else %}
+              <span class="text-amber-700 font-medium">⏳ Penilaian Anda belum diserahkan.</span>
+            {% endif %}
+          {% elif s.status == 'HASIL_AWAL' %}
+            Tahap penilaian selesai. Hasil rekomendasi Weighted Product telah tersedia.
+          {% endif %}
+        </div>
+
+        <div class="flex items-center space-x-2">
+          {# Aksi Buka Penilaian (T1) khusus Ketua bila masih DRAFT #}
+          {% if s.status == 'DRAFT' and active_seat.kode == 'KETUA' %}
+          <form method="post" action="{% url 'open-assessment' session_id=s.id %}">
+            {% csrf_token %}
+            <button type="submit"
+                    class="px-4 py-2 text-xs font-semibold rounded bg-sky-700 text-white hover:bg-sky-800 transition-colors">
+              Buka Sesi Penilaian (T1)
+            </button>
+          </form>
+          {% endif %}
+
+          {# Aksi Pengisian Penilaian (L4) #}
+          {% if s.status == 'PENILAIAN' and active_seat %}
+          <a href="{% url 'assessment-form' session_id=s.id %}"
+             class="px-4 py-2 text-xs font-semibold rounded bg-sky-700 text-white hover:bg-sky-800 transition-colors">
+            {% if item.my_assessment and item.my_assessment.status == 'SUBMITTED' %}
+              Lihat Penilaian Saya
+            {% else %}
+              Isi Matriks Penilaian
+            {% endif %}
+          </a>
+          {% endif %}
+
+          {# Aksi Lihat Hasil Awal (L5) #}
+          {% if s.status != 'DRAFT' and s.status != 'PENILAIAN' and active_seat %}
+          <a href="{% url 'results-view' session_id=s.id %}"
+             class="px-4 py-2 text-xs font-semibold rounded bg-emerald-700 text-white hover:bg-emerald-800 transition-colors">
+            Lihat Hasil Rekomendasi (WP)
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endwith %}
+    {% empty %}
+    <div class="bg-white rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-500">
+      Belum ada sesi keputusan yang terdaftar.
+    </div>
+    {% endfor %}
+  </div>
 </main>
 {% endblock %}

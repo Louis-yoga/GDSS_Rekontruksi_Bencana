@@ -6,7 +6,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Security](https://img.shields.io/badge/Security-Argon2%20%7C%20RBAC%20%7C%20Append--Only%20Audit-red?style=for-the-badge)](https://cheatsheetseries.owasp.org/)
-[![Tests](https://img.shields.io/badge/Tests-16%20Passed%20(Pytest)-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![Tests](https://img.shields.io/badge/Tests-26%20Passed%20(Pytest)-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](https://docs.pytest.org/)
 
 ---
 
