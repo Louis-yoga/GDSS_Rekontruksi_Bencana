@@ -83,6 +83,7 @@
     {# Tombol Bantu: Salin Rekomendasi WP #}
     <button type="button"
             id="btn-copy-wp"
+            data-wp-top-k="{% for r in wp_results %}{% if forloop.counter <= sesi.nilai_k %}{{ r.lokasi_id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}"
             class="px-3.5 py-1.5 rounded bg-white text-sky-800 border border-sky-300 hover:bg-sky-100 font-semibold transition-colors shrink-0">
       📋 Gunakan Urutan Rekomendasi WP
     </button>
@@ -186,14 +187,8 @@
 
   // 1-Klik Salin Rekomendasi WP
   if (btnCopyWp) {
-    // Array ID lokasi rekomendasi WP terurut
-    const wpTopK = [
-      {% for r in wp_results %}
-        {% if forloop.counter <= sesi.nilai_k %}
-          {{ r.lokasi_id }},
-        {% endif %}
-      {% endfor %}
-    ];
+    const rawIds = btnCopyWp.dataset.wpTopK || '';
+    const wpTopK = rawIds.split(',').filter(Boolean).map(id => parseInt(id.trim(), 10));
 
     btnCopyWp.addEventListener('click', function() {
       if (abstainBox && abstainBox.checked) {

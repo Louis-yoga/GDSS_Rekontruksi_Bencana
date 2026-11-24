@@ -88,7 +88,12 @@
   </details>
 
   {# ─── Matriks Penilaian Interaktif ───────────────────────────── #}
-  <form id="assessment-form" method="post" action="{% url 'submit-assessment' session_id=sesi.id %}">
+  <form id="assessment-form"
+        method="post"
+        action="{% url 'submit-assessment' session_id=sesi.id %}"
+        data-submitted="{% if assessment.status == 'SUBMITTED' %}true{% else %}false{% endif %}"
+        data-autosave-url="{% url 'api-autosave-assessment' session_id=sesi.id %}"
+        data-versi-draf="{{ assessment.versi_draf|default:1 }}">
     {% csrf_token %}
     <input type="hidden" name="idempotency_token" value="{{ idempotency_token }}">
 
@@ -177,11 +182,14 @@
 <script>
 (function() {
   'use strict';
-  const isSubmitted = {% if assessment.status == 'SUBMITTED' %}true{% else %}false{% endif %};
+  const formEl = document.getElementById('assessment-form');
+  if (!formEl) return;
+
+  const isSubmitted = formEl.dataset.submitted === 'true';
   if (isSubmitted) return;
 
-  const autosaveUrl = "{% url 'api-autosave-assessment' session_id=sesi.id %}";
-  let versiDraf = {{ assessment.versi_draf|default:1 }};
+  const autosaveUrl = formEl.dataset.autosaveUrl;
+  let versiDraf = parseInt(formEl.dataset.versiDraf, 10) || 1;
   const statusEl = document.getElementById('autosave-status');
   let saveTimer = null;
 
