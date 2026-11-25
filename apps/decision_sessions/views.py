@@ -33,6 +33,10 @@ from apps.decision_sessions.services.transitions import (
     transition_t4a_auto,
     transition_t4b_force_close_voting,
     extend_deadline,
+    detect_deviation,
+    transition_t5_finalize,
+    transition_t6_cancel,
+    transition_t7_revise,
 )
 from apps.decision_sessions.services.deadline import (
     evaluate_session_deadline,
@@ -575,3 +579,178 @@ def extend_deadline_view(request, session_id):
     except (ValidationError, PermissionDenied) as e:
         messages.error(request, str(e))
     return redirect('session-list')
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def config_session_view(request, session_id):
+    """
+    AC-14: Pembekuan Konfigurasi sejak PENILAIAN.
+    Perubahan bobot, nilai K, atau lokasi setelah status != DRAFT ditolak keras (HTTP 403).
+    """
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    if sesi.status != 'DRAFT':
+        EventLog.objects.create(
+            sesi=sesi,
+            user=request.user,
+            seat_kode='KETUA',
+            aksi='CONFIG_MODIFICATION_BLOCKED',
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:255],
+            detail={'status_saat_ini': sesi.status}
+        )
+        raise PermissionDenied("Konfigurasi sesi telah dibekukan sejak tahap PENILAIAN (AC-14).")
+
+    judul = request.POST.get('judul', '').strip()
+    if judul:
+        sesi.judul = judul
+
+    nilai_k = request.POST.get('nilai_k')
+    if nilai_k and nilai_k.isdigit():
+        k_int = int(nilai_k)
+        if 1 <= k_int <= sesi.locations.count():
+            sesi.nilai_k = k_int
+
+    for cr in sesi.criteria.all():
+        bobot_val = request.POST.get(f'bobot_{cr.id}')
+        if bobot_val:
+            try:
+                b_dec = Decimal(bobot_val)
+                if b_dec > 0:
+                    cr.bobot = b_dec
+                    cr.save(update_fields=['bobot'])
+            except Exception:
+                pass
+
+    sesi.save()
+    EventLog.objects.create(
+        sesi=sesi,
+        user=request.user,
+        seat_kode='KETUA',
+        aksi='CONFIG_UPDATED',
+        ip_address=_get_client_ip(request),
+        user_agent=request.META.get('HTTP_USER_AGENT', '')[:255],
+        detail={'nilai_k': sesi.nilai_k}
+    )
+    messages.success(request, "Konfigurasi sesi berhasil diperbarui.")
+    return redirect('session-list')
+
+
+@require_http_methods(['GET'])
+@requires_seat('KETUA')
+def finalize_page_view(request, session_id):
+    """L7 — Halaman Penetapan Keputusan Final (Khusus KETUA)"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    if sesi.status not in ['PENETAPAN', 'FINAL']:
+        messages.warning(request, f"Penetapan hanya tersedia pada tahap PENETAPAN (status: {sesi.status}).")
+        return redirect('session-list')
+
+    results = Result.objects.filter(sesi=sesi).select_related('lokasi').order_by('rank_final', 'rank_wp')
+    manual_ties = results.filter(metode_tiebreak='KETUA_MANUAL')
+    is_deviated = detect_deviation(sesi)
+
+    return render(request, 'sessions/finalize_form.html', {
+        'sesi': sesi,
+        'results': results,
+        'manual_ties': manual_ties,
+        'is_deviated': is_deviated,
+        'top_k_results': results.filter(rank_final__lte=sesi.nilai_k),
+    })
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def finalize_session_view(request, session_id):
+    """Transisi T5: PENETAPAN -> FINAL (AC-12, AC-15)"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    alasan_deviasi = request.POST.get('alasan_deviasi', '')
+    password = request.POST.get('password_konfirmasi', '')
+    manual_winner_id = request.POST.get('manual_winner_id')
+    catatan_tiebreak = request.POST.get('catatan_tiebreak', '')
+
+    try:
+        final_hash = transition_t5_finalize(
+            sesi,
+            request.user,
+            alasan_deviasi=alasan_deviasi,
+            password_konfirmasi=password,
+            manual_winner_id=int(manual_winner_id) if manual_winner_id and manual_winner_id.isdigit() else None,
+            catatan_tiebreak=catatan_tiebreak,
+            request=request,
+        )
+        messages.success(request, f"Keputusan Final berhasil ditetapkan! Hash SHA-256: {final_hash[:16]}…")
+        return redirect('report-view', session_id=sesi.id)
+    except ValidationError as e:
+        messages.error(request, e.message if hasattr(e, 'message') else str(e))
+        return redirect('finalize-page', session_id=sesi.id)
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def cancel_session_view(request, session_id):
+    """Transisi T6: Batalkan Sesi"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    alasan = request.POST.get('alasan', '')
+    password = request.POST.get('password_konfirmasi', '')
+
+    try:
+        transition_t6_cancel(sesi, request.user, alasan, password, request)
+        messages.success(request, f"Sesi '{sesi.judul}' telah dibatalkan.")
+    except ValidationError as e:
+        messages.error(request, e.message if hasattr(e, 'message') else str(e))
+    return redirect('session-list')
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def revise_session_view(request, session_id):
+    """Transisi T7: Buat Sesi Revisi v+1 dari Sesi FINAL"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    alasan = request.POST.get('alasan', '')
+    password = request.POST.get('password_konfirmasi', '')
+
+    try:
+        new_sesi = transition_t7_revise(sesi, request.user, alasan, password, request)
+        messages.success(request, f"Sesi revisi v{new_sesi.versi} berhasil dibuat sebagai DRAFT.")
+    except (ValidationError, PermissionDenied) as e:
+        messages.error(request, e.message if hasattr(e, 'message') else str(e))
+    return redirect('session-list')
+
+
+@require_http_methods(['GET'])
+@login_required(login_url='/auth/login/')
+def report_view(request, session_id):
+    """
+    L8 — Berita Acara & Jejak Audit Resmi (Read-Only, Semua Peran, Hanya Setelah FINAL/DIGANTIKAN)
+    Setelah status FINAL, seluruh skor mentah DM dan surat suara terbuka secara transparan.
+    """
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    if sesi.status not in ['FINAL', 'DIGANTIKAN']:
+        raise PermissionDenied("Berita Acara resmi hanya dapat diakses setelah keputusan berstatus FINAL.")
+
+    results = Result.objects.filter(sesi=sesi).select_related('lokasi').order_by('rank_final')
+    top_k_results = results.filter(rank_final__lte=sesi.nilai_k)
+    locations = sesi.locations.order_by('id')
+    criteria = sesi.criteria.order_by('id')
+    assessments = sesi.assessments.filter(status='SUBMITTED').select_related('seat', 'user').prefetch_related('scores')
+    votes = sesi.votes.select_related('seat', 'user').prefetch_related('items__lokasi').order_by('seat__id')
+    event_logs = EventLog.objects.filter(sesi=sesi).select_related('user').order_by('waktu')
+
+    # Matriks skor terbuka setelah FINAL
+    score_matrix = {}
+    for ass in assessments:
+        score_matrix[ass.seat.kode] = {
+            (sc.lokasi_id, sc.kriteria_id): sc.skor for sc in ass.scores.all()
+        }
+
+    return render(request, 'sessions/report.html', {
+        'sesi': sesi,
+        'results': results,
+        'top_k_results': top_k_results,
+        'locations': locations,
+        'criteria': criteria,
+        'assessments': assessments,
+        'score_matrix': score_matrix,
+        'votes': votes,
+        'event_logs': event_logs,
+    })

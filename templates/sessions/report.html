@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% load gdss_tags %}
+{% block title %}Berita Acara Resmi — {{ sesi.judul }}{% endblock %}
+
+{% block content %}
+<main class="print-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+
+  {# ─── Toolbar Aksi (Disembunyikan saat print) ────────────────── #}
+  <div class="no-print mb-6 flex items-center justify-between border-b border-slate-200 pb-4">
+    <a href="{% url 'session-list' %}" class="text-xs text-sky-700 hover:underline font-semibold">
+      ← Kembali ke Beranda Sesi
+    </a>
+    <button type="button" onclick="window.print()"
+            class="px-4 py-2 rounded bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 transition-colors">
+      Cetak Berita Acara
+    </button>
+  </div>
+
+  {# ─── Kop Dokumen Resmi ─────────────────────────────────────── #}
+  <header class="border-b-2 border-slate-900 pb-4 mb-6 text-center">
+    <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Berita Acara Penetapan Keputusan Kelompok (GDSS)</p>
+    <h1 class="text-lg sm:text-xl font-bold text-slate-900 mt-1">{{ sesi.judul }}</h1>
+    <p class="text-xs text-slate-600 mt-1">
+      Versi {{ sesi.versi }} &bull; Status: <strong>{{ sesi.status }}</strong> &bull;
+      Ditetapkan: {{ sesi.finalized_at|date:"d M Y, H:i" }} WIB
+    </p>
+    <p class="text-[11px] font-mono text-slate-500 mt-1 break-all">
+      SHA-256 Final Hash: {{ sesi.final_hash }}
+    </p>
+  </header>
+
+  {# ─── Penanda Kuorum Parsial & Deviasi ───────────────────────── #}
+  {% if sesi.kuorum_parsial or sesi.status_deviasi %}
+  <div class="mb-6 p-4 rounded border border-amber-300 bg-amber-50 text-xs text-amber-900 space-y-1">
+    {% if sesi.kuorum_parsial %}
+    <div><strong>Catatan Kuorum Parsial:</strong> {{ sesi.alasan_status }}</div>
+    {% endif %}
+    {% if sesi.status_deviasi %}
+    <div><strong>Catatan Deviasi Kebijakan:</strong> {{ sesi.alasan_deviasi }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ─── Daftar Top-K Lokasi Prioritas Penerima Bantuan ─────────── #}
+  <section class="mb-8">
+    <h2 class="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-3">
+      1. Daftar Top-{{ sesi.nilai_k }} Lokasi Prioritas Rekonstruksi
+    </h2>
+    <table class="w-full text-left border-collapse text-xs border border-slate-300">
+      <thead>
+        <tr class="bg-slate-100 border-b border-slate-300">
+          <th class="p-2.5 border-r border-slate-300 text-center">Peringkat Final</th>
+          <th class="p-2.5 border-r border-slate-300">Kode & Nama Lokasi</th>
+          <th class="p-2.5 border-r border-slate-300">Wilayah</th>
+          <th class="p-2.5 border-r border-slate-300 text-right">Poin Borda</th>
+          <th class="p-2.5 text-right">Skor WP (V)</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        {% for r in top_k_results %}
+        <tr>
+          <td class="p-2.5 border-r border-slate-300 text-center font-bold">#{{ r.rank_final }}</td>
+          <td class="p-2.5 border-r border-slate-300 font-semibold">{{ r.lokasi.kode }} - {{ r.lokasi.nama }}</td>
+          <td class="p-2.5 border-r border-slate-300">{{ r.lokasi.wilayah }}</td>
+          <td class="p-2.5 border-r border-slate-300 text-right font-mono">{{ r.poin_borda }}</td>
+          <td class="p-2.5 text-right font-mono">{{ r.skor_wp|floatformat:6 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {# ─── Transparansi Penuh Pasca-FINAL: Surat Suara Borda ──────── #}
+  <section class="mb-8">
+    <h2 class="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-3">
+      2. Rekapitulasi Surat Suara Konsensus Borda
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+      {% for v in votes %}
+      <div class="p-3 rounded border border-slate-300 bg-slate-50">
+        <div class="font-bold text-slate-800 mb-1">Kursi {{ v.seat.kode }} ({{ v.user.nama }})</div>
+        {% if v.abstain %}
+        <p class="italic text-slate-500">Memilih Abstain</p>
+        {% else %}
+        <ol class="list-decimal list-inside space-y-0.5 text-slate-700">
+          {% for it in v.items.all %}
+          <li>{{ it.lokasi.kode }} - {{ it.lokasi.nama }}</li>
+          {% endfor %}
+        </ol>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ─── Matriks Skor Lengkap Semua DM (Terbuka Pasca-FINAL) ────── #}
+  <section class="mb-8">
+    <h2 class="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-3">
+      3. Transparansi Matriks Penilaian Seluruh Pembuat Keputusan
+    </h2>
+    {% for ass in assessments %}
+    <div class="mb-4">
+      <h3 class="text-xs font-bold text-slate-700 mb-1.5">Kursi {{ ass.seat.kode }} — {{ ass.user.nama }}</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-[11px] border border-slate-300">
+          <thead>
+            <tr class="bg-slate-100 border-b border-slate-300">
+              <th class="p-1.5 border-r border-slate-300">Lokasi</th>
+              {% for cr in criteria %}
+              <th class="p-1.5 border-r border-slate-300 text-center">{{ cr.kode }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for loc in locations %}
+            <tr>
+              <td class="p-1.5 border-r border-slate-300 font-semibold">{{ loc.kode }}</td>
+              {% for cr in criteria %}
+              <td class="p-1.5 border-r border-slate-300 text-center font-mono">
+                {% with seat_scores=score_matrix|get_item:ass.seat.kode %}
+                {% get_score seat_scores loc.id cr.id %}
+                {% endwith %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ─── Kronologi Event Log ───────────────────────────────────── #}
+  <section>
+    <h2 class="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 mb-3">
+      4. Kronologi Jejak Audit (WIB)
+    </h2>
+    <table class="w-full text-left border-collapse text-[11px] border border-slate-300">
+      <thead>
+        <tr class="bg-slate-100 border-b border-slate-300">
+          <th class="p-2 border-r border-slate-300">Waktu</th>
+          <th class="p-2 border-r border-slate-300">Aksi</th>
+          <th class="p-2 border-r border-slate-300">Kursi / Aktor</th>
+          <th class="p-2">Transisi Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        {% for log in event_logs %}
+        <tr>
+          <td class="p-2 border-r border-slate-300 whitespace-nowrap">{{ log.waktu|date:"d/m/Y H:i:s" }}</td>
+          <td class="p-2 border-r border-slate-300 font-mono font-semibold">{{ log.aksi }}</td>
+          <td class="p-2 border-r border-slate-300">{{ log.seat_kode|default:"Sistem" }}</td>
+          <td class="p-2">
+            {% if log.status_dari %}{{ log.status_dari }} → {{ log.status_ke }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+{% endblock %}

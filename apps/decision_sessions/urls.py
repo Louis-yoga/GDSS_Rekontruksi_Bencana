@@ -32,4 +32,16 @@ urlpatterns = [
 
     # Perpanjang Tenggat Waktu (Fase 6 — Maks 2x)
     path('<int:session_id>/extend-deadline/', views.extend_deadline_view, name='extend-deadline'),
+
+    # Konfigurasi Sesi (AC-14 Frozen after PENILAIAN)
+    path('<int:session_id>/config/', views.config_session_view, name='config-session'),
+
+    # L7 — Penetapan Final, Pembatalan & Revisi (T5, T6, T7)
+    path('<int:session_id>/finalize-review/', views.finalize_page_view, name='finalize-page'),
+    path('<int:session_id>/finalize/', views.finalize_session_view, name='finalize-session'),
+    path('<int:session_id>/cancel/', views.cancel_session_view, name='cancel-session'),
+    path('<int:session_id>/revise/', views.revise_session_view, name='revise-session'),
+
+    # L8 — Berita Acara & Jejak Audit Resmi
+    path('<int:session_id>/report/', views.report_view, name='report-view'),
 ]

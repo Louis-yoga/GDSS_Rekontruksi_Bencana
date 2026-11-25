@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Penetapan Keputusan Final — {{ sesi.judul }}{% endblock %}
+
+{% block content %}
+<main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+
+  <div class="mb-6 border-b border-slate-200 pb-5">
+    <div class="flex items-center space-x-2 text-xs text-slate-500 mb-1">
+      <a href="{% url 'session-list' %}" class="hover:underline">Beranda Sesi</a>
+      <span>/</span>
+      <span>Penetapan Ketua (L7)</span>
+    </div>
+    <h1 class="text-xl font-bold text-slate-900">Penetapan Keputusan Final Prioritas Rekonstruksi</h1>
+    <p class="text-sm text-slate-600 mt-0.5">{{ sesi.judul }} (Versi {{ sesi.versi }}) &bull; Top-{{ sesi.nilai_k }} Lokasi</p>
+  </div>
+
+  {% if messages %}
+  <div class="space-y-2 mb-6">
+    {% for msg in messages %}
+    <div class="p-3.5 rounded text-xs sm:text-sm border {% if msg.tags == 'error' %}bg-red-50 text-red-800 border-red-200{% else %}bg-sky-50 text-sky-800 border-sky-200{% endif %}" role="alert">
+      {{ msg }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ─── Banner Peringatan Deviasi (AC-12) ─────────────────────── #}
+  {% if is_deviated %}
+  <div class="mb-6 rounded border border-amber-400 bg-amber-50 p-4 text-xs sm:text-sm text-amber-900" role="alert">
+    <div class="font-bold mb-1">Perhatian Deviasi Keputusan (AC-12)</div>
+    <p>Daftar Top-{{ sesi.nilai_k }} hasil Voting Borda berbeda dari rekomendasi awal Weighted Product (WP). Anda wajib menuliskan alasan deviasi minimal 20 karakter sebelum menetapkan keputusan final.</p>
+  </div>
+  {% endif %}
+
+  {# ─── Tabel Rekapitulasi Poin Borda & Tie-Break ─────────────── #}
+  <section class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-6">
+    <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-50">
+      <h2 class="text-sm font-bold text-slate-800">Rekapitulasi Poin Borda & Resolusi Seri</h2>
+    </div>
+    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+      <thead>
+        <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+          <th class="p-3 text-center">Rank Final</th>
+          <th class="p-3">Lokasi</th>
+          <th class="p-3 text-right">Poin Borda</th>
+          <th class="p-3 text-right">Skor WP (V)</th>
+          <th class="p-3 text-center">Rank WP</th>
+          <th class="p-3">Metode Tie-Break</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200">
+        {% for r in results %}
+        <tr class="{% if r.rank_final <= sesi.nilai_k %}bg-emerald-50/50{% endif %}">
+          <td class="p-3 text-center font-bold">#{{ r.rank_final }}</td>
+          <td class="p-3 font-semibold text-slate-900">{{ r.lokasi.kode }} - {{ r.lokasi.nama }}</td>
+          <td class="p-3 text-right font-mono font-bold">{{ r.poin_borda }}</td>
+          <td class="p-3 text-right font-mono text-slate-600">{{ r.skor_wp|floatformat:6 }}</td>
+          <td class="p-3 text-center text-slate-600">#{{ r.rank_wp }}</td>
+          <td class="p-3">
+            {% if r.metode_tiebreak and r.metode_tiebreak != 'NONE' %}
+            <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-xs font-semibold">{{ r.metode_tiebreak }}</span>
+            {% else %}
+            <span class="text-slate-400">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {# ─── Form Penetapan Final (T5) ─────────────────────────────── #}
+  {% if sesi.status == 'PENETAPAN' %}
+  <form method="post" action="{% url 'finalize-session' session_id=sesi.id %}" class="bg-white rounded-lg border border-slate-200 shadow-sm p-6 space-y-5">
+    {% csrf_token %}
+
+    {% if manual_ties %}
+    <div class="p-4 rounded border border-rose-300 bg-rose-50 space-y-3">
+      <h3 class="text-sm font-bold text-rose-900">Resolusi Tie-Break Tingkat 3 (KETUA_MANUAL) Diperlukan</h3>
+      <p class="text-xs text-rose-800">Pilih lokasi pemenang utama di antara lokasi yang seri dan berikan catatan justifikasi (min. 20 karakter):</p>
+      <select name="manual_winner_id" required class="w-full text-xs rounded border border-rose-300 p-2 bg-white">
+        <option value="">-- Pilih Pemenang Tie-Break --</option>
+        {% for r in manual_ties %}
+        <option value="{{ r.lokasi_id }}">{{ r.lokasi.kode }} - {{ r.lokasi.nama }}</option>
+        {% endfor %}
+      </select>
+      <textarea name="catatan_tiebreak" required minlength="20" rows="2"
+                placeholder="Justifikasi penetapan manual Ketua (min. 20 karakter)..."
+                class="w-full text-xs rounded border border-rose-300 p-2 bg-white"></textarea>
+    </div>
+    {% endif %}
+
+    {% if is_deviated %}
+    <div>
+      <label for="alasan_deviasi" class="block text-xs font-bold text-slate-800 mb-1">
+        Alasan Deviasi Keputusan (Wajib min. 20 karakter — AC-12)
+      </label>
+      <textarea id="alasan_deviasi" name="alasan_deviasi" required minlength="20" rows="3"
+                placeholder="Jelaskan dasar pertimbangan kebijakan mengapa Top-K Borda berbeda dari rekomendasi WP..."
+                class="w-full text-xs rounded border border-slate-300 p-2.5 focus:ring-2 focus:ring-sky-500 focus:outline-none"></textarea>
+    </div>
+    {% endif %}
+
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-slate-100">
+      <div class="text-xs text-slate-600">
+        Tindakan ini mengunci seluruh data secara permanen (<strong>FINAL</strong>) dan menghasilkan hash integritas SHA-256.
+      </div>
+      <div class="flex items-center space-x-3">
+        <input type="password" name="password_konfirmasi" required placeholder="Kata sandi Ketua"
+               autocomplete="current-password"
+               class="px-3 py-2 text-xs rounded border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+        <button type="submit"
+                class="px-5 py-2.5 rounded bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 transition-colors">
+          Tetapkan Keputusan Final
+        </button>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+</main>
+{% endblock %}

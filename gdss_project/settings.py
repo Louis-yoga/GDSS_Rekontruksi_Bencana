@@ -86,10 +86,21 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
 ]
 
-# Session Settings
+# Session & Security Hardening Settings (Sprint 18)
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_AGE = 1800  # 30 menit idle timeout sesuai AC-13
+CSRF_COOKIE_HTTPONLY = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # Localization
 LANGUAGE_CODE = 'id-id'

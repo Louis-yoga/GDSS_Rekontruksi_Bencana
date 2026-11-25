@@ -153,6 +153,22 @@
             Masuk ke Ruang Voting (L6)
           </a>
           {% endif %}
+
+          {# Aksi Penetapan Final (L7 — Khusus KETUA) #}
+          {% if s.status == 'PENETAPAN' and active_seat.kode == 'KETUA' %}
+          <a href="{% url 'finalize-page' session_id=s.id %}"
+             class="px-4 py-2 text-xs font-semibold rounded bg-purple-700 text-white hover:bg-purple-800 transition-colors">
+            Penetapan Keputusan Final (L7)
+          </a>
+          {% endif %}
+
+          {# Aksi Berita Acara Resmi (L8 — Semua Peran pasca-FINAL) #}
+          {% if s.status == 'FINAL' or s.status == 'DIGANTIKAN' %}
+          <a href="{% url 'report-view' session_id=s.id %}"
+             class="px-4 py-2 text-xs font-semibold rounded bg-slate-800 text-white hover:bg-slate-900 transition-colors">
+            Berita Acara & Jejak Audit (L8)
+          </a>
+          {% endif %}
         </div>
       </div>
     </div>
