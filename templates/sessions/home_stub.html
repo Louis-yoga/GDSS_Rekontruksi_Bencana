@@ -19,6 +19,15 @@
         {% endif %}
       </p>
     </div>
+
+    {% if user.role == 'ADMIN' %}
+    <div>
+      <a href="{% url 'admin-panel' %}"
+         class="inline-flex items-center px-4 py-2 rounded bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 transition-colors">
+        Panel Admin & Tukar Plt (L9)
+      </a>
+    </div>
+    {% endif %}
   </div>
 
   {# ─── Flash Messages ─────────────────────────────────────────── #}
@@ -37,6 +46,23 @@
     {% for item in sessions_data %}
     {% with s=item.sesi %}
     <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
+
+      {# ─── Banner Eskalasi Kritis SLA 6 Jam (AC-11) ──────────── #}
+      {% if item.deadline_info.sla_escalated %}
+      <div class="mb-4 rounded border border-red-400 bg-red-50 px-4 py-3 text-xs text-red-900" role="alert">
+        <div class="font-bold text-red-800 mb-0.5">PERINGATAN ESKALASI SLA</div>
+        <p>{{ item.deadline_info.sla_message }}</p>
+      </div>
+      {% elif item.deadline_info.reminder_level == '80' %}
+      <div class="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900" role="status">
+        <strong>Pengingat Tenggat (80% Terlewati):</strong> Waktu tersisa kurang dari 20%. Harap segera selesaikan tugas kursi Anda.
+      </div>
+      {% elif item.deadline_info.reminder_level == '50' %}
+      <div class="mb-4 rounded border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-900" role="status">
+        <strong>Pengingat Tenggat (50% Terlewati):</strong> Setengah dari alokasi waktu tahap ini telah berlalu.
+      </div>
+      {% endif %}
+
       <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
           <div class="flex items-center space-x-3 mb-1.5">

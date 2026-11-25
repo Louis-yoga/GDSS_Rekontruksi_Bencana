@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Panel Administrator & Manajemen Kursi — GDSS Rekonstruksi{% endblock %}
+
+{% block content %}
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
+
+  {# ─── Header Panel Admin ─────────────────────────────────────── #}
+  <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
+    <div>
+      <div class="flex items-center space-x-2 text-xs text-slate-500 mb-1">
+        <a href="{% url 'session-list' %}" class="hover:underline">Beranda Sesi</a>
+        <span>/</span>
+        <span>Manajemen Akun & Kursi (L9)</span>
+      </div>
+      <h1 class="text-xl font-bold text-slate-900 leading-tight">
+        Manajemen Kursi Keputusan (Plt) & Jejak Audit
+      </h1>
+      <p class="text-sm text-slate-500 mt-0.5">
+        Pengelolaan pemegang kursi tetap, penugasan Pelaksana Tugas (Plt), dan pemantauan audit log.
+      </p>
+    </div>
+  </div>
+
+  {# ─── Flash Messages ─────────────────────────────────────────── #}
+  {% if messages %}
+  <div class="space-y-2 mb-6">
+    {% for msg in messages %}
+    <div class="p-3.5 rounded text-xs sm:text-sm border {% if msg.tags == 'error' %}bg-red-50 text-red-800 border-red-200{% elif msg.tags == 'success' %}bg-emerald-50 text-emerald-800 border-emerald-200{% else %}bg-sky-50 text-sky-800 border-sky-200{% endif %}" role="alert">
+      {{ msg }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ─── Tabel 3 Kursi Keputusan & Form Tukar Plt ──────────────── #}
+  <section class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden mb-8" aria-labelledby="heading-seats">
+    <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
+      <h2 id="heading-seats" class="text-sm font-bold text-slate-800">3 Kursi Keputusan Tetap & Penukaran Plt</h2>
+      <p class="text-xs text-slate-500">Penukaran pemegang kursi otomatis memutus sesi login pejabat sebelumnya dan mencatat riwayat.</p>
+    </div>
+
+    <div class="divide-y divide-slate-200">
+      {% for seat in seats %}
+      <div class="p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div>
+          <div class="flex items-center space-x-2.5 mb-1">
+            <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-xs font-bold">{{ seat.kode }}</span>
+            <h3 class="text-sm font-bold text-slate-900">{{ seat.nama_jabatan }}</h3>
+          </div>
+          <p class="text-xs text-slate-600">
+            Pejabat Aktif:
+            {% if seat.user_id_aktif %}
+              <strong class="text-slate-900">{{ seat.user_id_aktif.nama }}</strong>
+              <span class="text-slate-500">({{ seat.user_id_aktif.email }})</span>
+            {% else %}
+              <span class="text-red-600 font-semibold">Belum Ditugaskan</span>
+            {% endif %}
+          </p>
+        </div>
+
+        {# Form Tukar Plt #}
+        <form method="post" action="{% url 'assign-plt-seat' seat_kode=seat.kode %}"
+              class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 bg-slate-50 p-3 rounded border border-slate-200">
+          {% csrf_token %}
+          <select name="user_id" required aria-label="Pilih pejabat Plt untuk kursi {{ seat.kode }}"
+                  class="text-xs rounded border border-slate-300 px-2.5 py-2 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none">
+            <option value="">-- Pilih Pengganti (DM) --</option>
+            {% for u in dm_users %}
+            <option value="{{ u.id }}" {% if seat.user_id_aktif_id == u.id %}selected{% endif %}>
+              {{ u.nama }} ({{ u.email }})
+            </option>
+            {% endfor %}
+          </select>
+
+          <input type="text" name="alasan" required minlength="10"
+                 placeholder="No. Surat Tugas / Alasan (min 10 char)"
+                 class="text-xs rounded border border-slate-300 px-2.5 py-2 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none sm:w-56">
+
+          <input type="password" name="password_konfirmasi" required
+                 placeholder="Kata sandi Admin"
+                 autocomplete="current-password"
+                 class="text-xs rounded border border-slate-300 px-2.5 py-2 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none sm:w-36">
+
+          <button type="submit"
+                  class="px-4 py-2 rounded bg-sky-700 text-white text-xs font-semibold hover:bg-sky-800 transition-colors shrink-0">
+            Tukar Plt
+          </button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    {# ─── Riwayat Penukaran Kursi ──────────────────────────────── #}
+    <section class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden" aria-labelledby="heading-history">
+      <div class="px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 id="heading-history" class="text-sm font-bold text-slate-800">Riwayat Penukaran Kursi (Seat History)</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+              <th class="p-3 font-semibold">Kursi</th>
+              <th class="p-3 font-semibold">Pejabat</th>
+              <th class="p-3 font-semibold">Mulai</th>
+              <th class="p-3 font-semibold">Alasan / Surat Tugas</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for h in seat_history %}
+            <tr>
+              <td class="p-3 font-bold text-slate-800">{{ h.seat.kode }}</td>
+              <td class="p-3 text-slate-700">{{ h.user.nama }}</td>
+              <td class="p-3 text-slate-500 whitespace-nowrap">{{ h.mulai_pada|date:"d/m/Y H:i" }}</td>
+              <td class="p-3 text-slate-600">{{ h.alasan }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="p-4 text-center text-slate-500">Belum ada riwayat penukaran kursi.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ─── Event Log Terbaru (Append-Only Audit Trail) ──────────── #}
+    <section class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden" aria-labelledby="heading-audit">
+      <div class="px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <h2 id="heading-audit" class="text-sm font-bold text-slate-800">Jejak Audit Sistem (Append-Only Event Log)</h2>
+      </div>
+      <div class="overflow-x-auto max-h-96">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+              <th class="p-3 font-semibold">Waktu (WIB)</th>
+              <th class="p-3 font-semibold">Aksi</th>
+              <th class="p-3 font-semibold">Aktor / Kursi</th>
+              <th class="p-3 font-semibold">IP</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            {% for log in event_logs %}
+            <tr>
+              <td class="p-3 text-slate-500 whitespace-nowrap">{{ log.waktu|date:"d/m H:i:s" }}</td>
+              <td class="p-3 font-mono font-semibold text-slate-800">{{ log.aksi }}</td>
+              <td class="p-3 text-slate-600">
+                {% if log.seat_kode %}{{ log.seat_kode }}{% elif log.user %}{{ log.user.email }}{% else %}Sistem{% endif %}
+              </td>
+              <td class="p-3 font-mono text-slate-500">{{ log.ip_address }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="p-4 text-center text-slate-500">Belum ada catatan aktivitas.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}

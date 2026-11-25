@@ -29,4 +29,7 @@ urlpatterns = [
 
     # Transisi T4-B: Tutup Paksa Voting (AC-10)
     path('<int:session_id>/close-voting/', views.force_close_voting_view, name='close-voting'),
+
+    # Perpanjang Tenggat Waktu (Fase 6 — Maks 2x)
+    path('<int:session_id>/extend-deadline/', views.extend_deadline_view, name='extend-deadline'),
 ]

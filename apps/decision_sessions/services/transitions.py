@@ -358,7 +358,7 @@ def transition_t4b_force_close_voting(
         raise ValidationError("Alasan penutupan paksa voting wajib diisi minimal 20 karakter.")
 
     now = timezone.now()
-    if sesi.deadline_aktif and now <= sesi.deadline_aktif:
+    if not sesi.deadline_aktif or now <= sesi.deadline_aktif:
         raise PermissionDenied(
             "Larangan AC-10: Voting tidak dapat ditutup sebelum batas waktu/deadline berakhir."
         )
@@ -396,5 +396,68 @@ def transition_t4b_force_close_voting(
             'votes_count': votes.count(),
             'alasan': alasan.strip(),
             'kuorum_parsial': True,
+        }
+    )
+
+
+@transaction.atomic
+def extend_deadline(
+    sesi: SesiKeputusan,
+    user,
+    alasan: str,
+    password_konfirmasi: str,
+    tambahan_menit: int = 360,
+    request=None
+) -> None:
+    """
+    Perpanjang Tenggat Waktu (Fase 6 — Sprint 15)
+    Guard:
+    - Status sesi harus PENILAIAN atau VOTING
+    - Hanya pemegang kursi KETUA
+    - jumlah_perpanjangan < 2 (maksimal 2 kali perpanjangan)
+    - Alasan >= 20 karakter
+    - Kata sandi konfirmasi valid
+    """
+    if sesi.status not in ['PENILAIAN', 'VOTING']:
+        raise ValidationError(f"Perpanjangan tenggat hanya diizinkan pada tahap PENILAIAN atau VOTING (status saat ini: {sesi.status}).")
+
+    active_seat = getattr(user, 'active_seat', None)
+    if not active_seat or active_seat.kode != 'KETUA':
+        raise PermissionDenied("Hanya Ketua BPBD yang berwenang memperpanjang tenggat waktu.")
+
+    if not user.check_password(password_konfirmasi):
+        raise ValidationError("Kata sandi konfirmasi tidak valid.")
+
+    if sesi.jumlah_perpanjangan >= 2:
+        raise ValidationError("Batas maksimal perpanjangan tenggat (2 kali) telah tercapai.")
+
+    if not alasan or len(alasan.strip()) < 20:
+        raise ValidationError("Alasan perpanjangan tenggat wajib diisi minimal 20 karakter.")
+
+    if tambahan_menit <= 0:
+        raise ValidationError("Durasi tambahan harus lebih besar dari 0 menit.")
+
+    now = timezone.now()
+    base_time = max(now, sesi.deadline_aktif) if sesi.deadline_aktif else now
+    old_deadline = sesi.deadline_aktif.isoformat() if sesi.deadline_aktif else None
+
+    sesi.deadline_aktif = base_time + timezone.timedelta(minutes=tambahan_menit)
+    sesi.jumlah_perpanjangan += 1
+    sesi.save(update_fields=['deadline_aktif', 'jumlah_perpanjangan', 'updated_at'])
+
+    EventLog.objects.create(
+        sesi=sesi,
+        user=user,
+        seat_kode='KETUA',
+        aksi='DEADLINE_EXTENDED',
+        ip_address=_get_client_ip(request),
+        user_agent=_get_user_agent(request),
+        detail={
+            'tahap': sesi.status,
+            'old_deadline': old_deadline,
+            'new_deadline': sesi.deadline_aktif.isoformat(),
+            'tambahan_menit': tambahan_menit,
+            'jumlah_perpanjangan': sesi.jumlah_perpanjangan,
+            'alasan': alasan.strip(),
         }
     )

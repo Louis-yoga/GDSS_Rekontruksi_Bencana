@@ -55,17 +55,16 @@ def resolve_group_ties(
 
     # ─── Tingkat 1: Skor WP Kelompok (V_i) ──────────────────────
     # Urutkan berdasarkan skor_wp desc
+    # Compare stored decimal values directly; converting to float can change ties.
+    wp_values = {loc.id: wp_result_map[loc.id].skor_wp for loc in locations_in_group
+                 if loc.id in wp_result_map}
     sorted_by_wp = sorted(
         locations_in_group,
-        key=lambda loc: (
-            -float(wp_result_map[loc.id].skor_wp) if loc.id in wp_result_map else 0.0,
-            loc.kode
-        )
+        key=lambda loc: (-wp_values.get(loc.id, Decimal('0')), loc.kode, loc.id)
     )
 
-    # Periksa apakah seluruh skor WP di kelompok ini unik
-    wp_scores = [float(wp_result_map[loc.id].skor_wp) for loc in locations_in_group if loc.id in wp_result_map]
-    if len(set(wp_scores)) == len(locations_in_group):
+    # Missing WP data cannot resolve a tie deterministically.
+    if len(wp_values) == len(locations_in_group) and len(set(wp_values.values())) == len(locations_in_group):
         return (
             sorted_by_wp,
             'WP_SCORE',
@@ -80,7 +79,7 @@ def resolve_group_ties(
         # Nilai peringkat: semakin kecil r semakin baik; jika tidak dicantumkan diberi peringkat besar (k + 99)
         def _ketua_priority(loc):
             r = ketua_rank_map.get(loc.id, k + 99)
-            return (r, -float(wp_result_map[loc.id].skor_wp) if loc.id in wp_result_map else 0.0, loc.kode)
+            return (r, -wp_values.get(loc.id, Decimal('0')), loc.kode, loc.id)
 
         sorted_by_ketua = sorted(locations_in_group, key=_ketua_priority)
         ketua_ranks = [ketua_rank_map.get(loc.id, k + 99) for loc in locations_in_group]
@@ -111,12 +110,17 @@ def execute_borda_and_ranking(sesi: SesiKeputusan) -> List[Result]:
     5. Simpan poin_borda, rank_final, metode_tiebreak ke tabel results
     """
     locations = list(sesi.locations.all().order_by('id'))
+    if not locations:
+        return []
     votes = list(sesi.votes.filter(sesi=sesi).prefetch_related('items'))
     k = sesi.nilai_k
 
     # Ambil map skor WP yang telah dihitung sebelumnya
     results_qs = Result.objects.filter(sesi=sesi)
     wp_result_map = {r.lokasi_id: r for r in results_qs}
+    missing = [loc.kode for loc in locations if loc.id not in wp_result_map]
+    if missing:
+        raise ValueError('Hasil WP belum lengkap untuk lokasi: ' + ', '.join(missing))
 
     # Cari vote milik kursi KETUA
     ketua_vote = next((v for v in votes if v.seat.kode == 'KETUA'), None)

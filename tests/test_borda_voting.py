@@ -1,5 +1,6 @@
 import pytest
 from decimal import Decimal
+from types import SimpleNamespace
 from django.core.management import call_command
 from django.urls import reverse
 from django.test import Client
@@ -190,6 +191,20 @@ class TestBordaVotingAndTieBreaker:
         client_ketua = Client()
         client_ketua.post(reverse('login'), {'email': 'ketua@bpbd.go.id', 'kata_sandi': 'Bpbd@2026!'})
 
+        # A missing deadline is not evidence that the voting period has ended.
+        sesi.deadline_aktif = None
+        sesi.save()
+        res_missing_deadline = client_ketua.post(
+            reverse('close-voting', args=[sesi.id]),
+            data={'alasan': 'Mencoba menutup tanpa tenggat aktif', 'password_konfirmasi': 'Bpbd@2026!'}
+        )
+        sesi.refresh_from_db()
+        assert res_missing_deadline.status_code == 302
+        assert sesi.status == 'VOTING'
+
+        sesi.deadline_aktif = timezone.now() + timezone.timedelta(hours=1)
+        sesi.save()
+
         res = client_ketua.post(
             reverse('close-voting', args=[sesi.id]),
             data={'alasan': 'Mencoba menutup voting lebih awal sebelum tenggat', 'password_konfirmasi': 'Bpbd@2026!'}
@@ -243,3 +258,75 @@ class TestBordaVotingAndTieBreaker:
         loc_a_res = Result.objects.get(sesi=sesi, lokasi=locations[0])
         assert loc_a_res.poin_borda > 0
         assert loc_a_res.rank_final is not None
+
+    def test_tiebreak_compares_wp_decimals_without_float_rounding(self):
+        sesi = _setup_voting_session()
+        loc_a, loc_b = list(sesi.locations.all()[:2])
+        wp_map = {
+            loc_a.id: SimpleNamespace(skor_wp=Decimal('0.20000000000000002')),
+            loc_b.id: SimpleNamespace(skor_wp=Decimal('0.20000000000000001')),
+        }
+
+        ordered, method, _ = resolve_group_ties(
+            [loc_b, loc_a], wp_map, ketua_vote=None, k=sesi.nilai_k
+        )
+
+        assert method == 'WP_SCORE'
+        assert ordered == [loc_a, loc_b]
+
+    def test_vote_rejects_location_from_another_session(self):
+        sesi = _setup_voting_session()
+        other_session = SesiKeputusan.objects.create(judul='Sesi lain')
+        foreign_location = Location.objects.create(
+            sesi=other_session, kode='ASING', nama='Lokasi asing', wilayah='Kabupaten'
+        )
+        client = Client()
+        client.post(reverse('login'), {
+            'email': 'kadis.pu@pupr.go.id', 'kata_sandi': 'Bpbd@2026!'
+        })
+        response = client.get(reverse('voting-view', args=[sesi.id]))
+        locations = list(sesi.locations.all()[:2])
+        payload = {
+            'idempotency_token': response.context['idempotency_token'],
+            'password_konfirmasi': 'Bpbd@2026!',
+            'rank_1': str(locations[0].id),
+            'rank_2': str(locations[1].id),
+            'rank_3': str(foreign_location.id),
+        }
+
+        result = client.post(reverse('submit-vote', args=[sesi.id]), data=payload)
+
+        assert result.status_code == 302
+        assert not Vote.objects.filter(sesi=sesi, seat__kode='PU').exists()
+
+    def test_voting_screen_requires_review_before_submission(self):
+        sesi = _setup_voting_session()
+        client = Client()
+        client.post(reverse('login'), {
+            'email': 'kadis.pu@pupr.go.id', 'kata_sandi': 'Bpbd@2026!'
+        })
+
+        response = client.get(reverse('voting-view', args=[sesi.id]))
+        content = response.content.decode()
+
+        assert response.status_code == 200
+        assert '<dialog id="vote-confirmation"' in content
+        assert 'id="confirmation-summary"' in content
+        assert 'id="confirmation-password"' in content
+        assert 'Pilih tepat 3 lokasi' in content
+
+    def test_closed_voting_screen_hides_submission_form(self):
+        sesi = _setup_voting_session()
+        sesi.status = 'PENETAPAN'
+        sesi.save()
+        client = Client()
+        client.post(reverse('login'), {
+            'email': 'kadis.pu@pupr.go.id', 'kata_sandi': 'Bpbd@2026!'
+        })
+
+        response = client.get(reverse('voting-view', args=[sesi.id]))
+        content = response.content.decode()
+
+        assert response.status_code == 200
+        assert 'Sesi tidak menerima surat suara baru' in content
+        assert 'id="voting-form"' not in content

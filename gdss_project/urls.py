@@ -16,7 +16,10 @@ urlpatterns = [
     # Autentikasi (Fase 1)
     path('auth/', include('apps.accounts.urls')),
 
-    # Sesi Keputusan (Fase 2+) — stub home redirect for now
+    # Panel Admin & Manajemen Kursi Plt L9 (Fase 6)
+    path('admin-panel/', include('apps.accounts.admin_urls')),
+
+    # Sesi Keputusan (Fase 2+)
     path(
         'sessions/',
         include('apps.decision_sessions.urls'),

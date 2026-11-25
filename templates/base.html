@@ -24,6 +24,12 @@
         }
     </script>
     <style>
+        button:not(:disabled), a[href], select:enabled, input[type="checkbox"]:enabled, label[for] { cursor: pointer; }
+        button:disabled, select:disabled, input:disabled { cursor: not-allowed; }
+        a[href]:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+            outline: 3px solid #0c4a6e;
+            outline-offset: 2px;
+        }
         @media print {
             .no-print { display: none !important; }
             body { background: white !important; color: black !important; font-size: 11pt; }
@@ -40,7 +46,7 @@
                     GDSS
                 </span>
                 <div>
-                    <h1 class="text-sm font-semibold tracking-tight leading-tight">Penentuan Lokasi Rekonstruksi</h1>
+                    <p class="text-sm font-semibold tracking-tight leading-tight">Penentuan Lokasi Rekonstruksi</p>
                     <p class="text-xs text-slate-400">Sistem Pendukung Keputusan Kelompok</p>
                 </div>
             </div>
@@ -86,7 +92,7 @@
 
     <footer class="no-print mt-auto bg-white border-t border-slate-200 text-xs text-slate-500 py-4">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2">
-            <span>BPBD &copy; 2026 &mdash; Sistem Pendukung Keputusan Kelompok Bencana</span>
+            <span>BPBD &copy; 2026 · Sistem Pendukung Keputusan Kelompok Bencana</span>
             <span>Prinsip: Human-in-the-Loop &middot; Server-Side Guard &middot; Immutable Audit</span>
         </div>
     </footer>

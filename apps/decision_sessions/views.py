@@ -18,6 +18,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.utils import timezone
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import IntegrityError, transaction
 
 from apps.accounts.rbac import requires_seat, requires_any_dm
 from apps.decision_sessions.models import (
@@ -30,7 +31,12 @@ from apps.decision_sessions.services.transitions import (
     unlock_assessment,
     transition_t3_open_voting,
     transition_t4a_auto,
-    transition_t4b_force_close_voting
+    transition_t4b_force_close_voting,
+    extend_deadline,
+)
+from apps.decision_sessions.services.deadline import (
+    evaluate_session_deadline,
+    record_sla_escalation_if_needed,
 )
 from apps.decision_sessions.services.wp_engine import (
     normalize_weights,
@@ -56,6 +62,10 @@ def home_view(request):
 
     sessions_data = []
     for s in sesi_list:
+        # Lazy deadline & SLA evaluation
+        record_sla_escalation_if_needed(s)
+        deadline_info = evaluate_session_deadline(s)
+
         assessments_count = s.assessments.filter(status='SUBMITTED').count()
         # Cek status penilaian kursi user ini
         my_assessment = None
@@ -66,6 +76,7 @@ def home_view(request):
             'sesi': s,
             'submitted_dm_count': assessments_count,
             'my_assessment': my_assessment,
+            'deadline_info': deadline_info,
         })
 
     return render(request, 'sessions/home_stub.html', {
@@ -399,6 +410,11 @@ def voting_view(request, session_id):
     # Daftar kandidat lokasi dan rekomendasi WP
     locations = sesi.locations.all().order_by('id')
     wp_results = Result.objects.filter(sesi=sesi).select_related('lokasi').order_by('rank_wp')
+    wp_top_ids = list(
+        Result.objects.filter(sesi=sesi, rank_wp__lte=sesi.nilai_k)
+        .order_by('rank_wp')
+        .values_list('lokasi_id', flat=True)
+    )
 
     # Buat token idempotency (AC-05)
     token_key = f'idempotency_token_vote_{sesi.id}'
@@ -420,12 +436,14 @@ def voting_view(request, session_id):
         'my_vote': my_vote,
         'locations': locations,
         'wp_results': wp_results,
+        'wp_top_ids': wp_top_ids,
         'idempotency_token': idempotency_token,
         'selected_rank_map': selected_rank_map,
         'k_range': k_range,
     })
 
 
+@transaction.atomic
 @require_http_methods(['POST'])
 @requires_seat('KETUA', 'PU', 'SOSIAL')
 def submit_vote_view(request, session_id):
@@ -436,7 +454,7 @@ def submit_vote_view(request, session_id):
     - Opsi Abstain vs Pilihan Tepat K lokasi unik
     - Auto-transisi T4-A bila seluruh 3 DM telah memberikan suara
     """
-    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    sesi = get_object_or_404(SesiKeputusan.objects.select_for_update(), pk=session_id)
     if sesi.status != 'VOTING':
         return HttpResponseBadRequest("Sesi tidak dalam tahap VOTING.")
 
@@ -450,7 +468,7 @@ def submit_vote_view(request, session_id):
     # Validasi idempotency token
     token_key = f'idempotency_token_vote_{sesi.id}'
     submitted_token = request.POST.get('idempotency_token')
-    session_token = request.session.pop(token_key, None)
+    session_token = request.session.get(token_key)
 
     if not submitted_token or submitted_token != session_token:
         # Jika token hilang atau tidak cocok (misal klik beruntun), abaikan request duplikat
@@ -464,17 +482,10 @@ def submit_vote_view(request, session_id):
         return redirect('voting-view', session_id=sesi.id)
 
     is_abstain = request.POST.get('abstain') == 'true'
+    chosen_loc_ids = []
 
-    if is_abstain:
-        Vote.objects.create(
-            sesi=sesi,
-            seat=seat,
-            user=request.user,
-            abstain=True
-        )
-    else:
+    if not is_abstain:
         k = sesi.nilai_k
-        chosen_loc_ids = []
         for r in range(1, k + 1):
             val = request.POST.get(f'rank_{r}')
             if not val or not val.isdigit():
@@ -486,19 +497,24 @@ def submit_vote_view(request, session_id):
                 return redirect('voting-view', session_id=sesi.id)
             chosen_loc_ids.append(loc_id)
 
-        # Buat objek Vote dan VoteItem
-        vote = Vote.objects.create(
-            sesi=sesi,
-            seat=seat,
-            user=request.user,
-            abstain=False
-        )
-        for r, loc_id in enumerate(chosen_loc_ids, start=1):
-            VoteItem.objects.create(
-                vote=vote,
-                peringkat=r,
-                lokasi_id=loc_id
+        valid_ids = set(sesi.locations.filter(id__in=chosen_loc_ids).values_list('id', flat=True))
+        if len(valid_ids) != k:
+            messages.error(request, "Semua lokasi pilihan harus berasal dari sesi ini.")
+            return redirect('voting-view', session_id=sesi.id)
+
+    request.session.pop(token_key, None)
+
+    try:
+        with transaction.atomic():
+            vote = Vote.objects.create(
+                sesi=sesi, seat=seat, user=request.user, abstain=is_abstain
             )
+            if not is_abstain:
+                for r, loc_id in enumerate(chosen_loc_ids, start=1):
+                    VoteItem.objects.create(vote=vote, peringkat=r, lokasi_id=loc_id)
+    except IntegrityError:
+        messages.info(request, "Suara Anda sudah tercatat sebelumnya.")
+        return redirect('voting-view', session_id=sesi.id)
 
     EventLog.objects.create(
         sesi=sesi,
@@ -535,3 +551,27 @@ def force_close_voting_view(request, session_id):
     except (ValidationError, PermissionDenied) as e:
         messages.error(request, str(e))
         return redirect('session-list')
+
+
+@require_http_methods(['POST'])
+@requires_seat('KETUA')
+def extend_deadline_view(request, session_id):
+    """Perpanjang Tenggat Waktu PENILAIAN/VOTING (Maks 2x)"""
+    sesi = get_object_or_404(SesiKeputusan, pk=session_id)
+    alasan = request.POST.get('alasan', '')
+    password = request.POST.get('password_konfirmasi', '')
+    try:
+        tambahan_menit = int(request.POST.get('tambahan_menit', 360))
+    except (ValueError, TypeError):
+        tambahan_menit = 360
+
+    try:
+        extend_deadline(sesi, request.user, alasan, password, tambahan_menit, request)
+        messages.success(
+            request,
+            f"Tenggat waktu sesi '{sesi.judul}' berhasil diperpanjang (+{tambahan_menit} menit). "
+            f"Perpanjangan ke-{sesi.jumlah_perpanjangan} dari maksimal 2."
+        )
+    except (ValidationError, PermissionDenied) as e:
+        messages.error(request, str(e))
+    return redirect('session-list')

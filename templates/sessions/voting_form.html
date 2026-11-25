@@ -1,223 +1,236 @@
 {% extends "base.html" %}
-{% block title %}Ruang Konsensus & Voting Borda — {{ sesi.judul }}{% endblock %}
+{% block title %}Voting Borda: {{ sesi.judul }}{% endblock %}
 
 {% block content %}
-<main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
-
-  {# ─── Breadcrumb & Header ────────────────────────────────────── #}
-  <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
-    <div>
-      <div class="flex items-center space-x-2 text-xs text-slate-500 mb-1">
-        <a href="{% url 'session-list' %}" class="hover:underline">Beranda Sesi</a>
-        <span>/</span>
-        <span>Voting Konsensus Borda</span>
-      </div>
-      <h1 class="text-xl font-bold text-slate-900 leading-tight">
-        Ruang Konsensus & Voting Pemilihan Top-{{ sesi.nilai_k }} Lokasi
-      </h1>
-      <p class="text-sm text-slate-600 mt-0.5">
-        {{ sesi.judul }} &bull; Kursi: <span class="font-semibold text-sky-800">{{ seat.nama_jabatan }} ({{ seat.kode }})</span>
-      </p>
-    </div>
-
-    {# Tenggat Waktu #}
-    {% if sesi.deadline_aktif %}
-    <div class="px-3 py-1.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-xs font-medium">
-      Batas Waktu Voting: {{ sesi.deadline_aktif|date:"d M Y, H:i" }} WIB
-    </div>
-    {% endif %}
-  </div>
-
-  {# ─── Flash Messages ─────────────────────────────────────────── #}
-  {% if messages %}
-  <div class="space-y-2 mb-6">
-    {% for msg in messages %}
-    <div class="p-3.5 rounded text-xs sm:text-sm border {% if msg.tags == 'error' %}bg-red-50 text-red-800 border-red-200{% elif msg.tags == 'success' %}bg-emerald-50 text-emerald-800 border-emerald-200{% else %}bg-sky-50 text-sky-800 border-sky-200{% endif %}" role="alert">
-      {{ msg }}
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {# ─── Status Surat Suara Tersegel (Sudah Memilih) ────────────── #}
-  {% if my_vote %}
-  <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-6 mb-8 text-center sm:text-left">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+<section class="max-w-4xl mx-auto" aria-labelledby="voting-title">
+  <div class="mb-7 border-b border-slate-200 pb-5">
+    <nav aria-label="Navigasi halaman" class="mb-3 text-xs text-slate-500">
+      <a href="{% url 'session-list' %}" class="hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Beranda sesi</a>
+      <span aria-hidden="true" class="px-2">/</span>
+      <span aria-current="page">Voting Borda</span>
+    </nav>
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-semibold mb-1">
-          <span>✓ Surat Suara Terkirim & Tersegel</span>
-        </div>
-        <h2 class="text-base font-bold text-slate-900">Pilihan Kursi {{ seat.kode }} Telah Disimpan</h2>
-        <p class="text-xs text-slate-500">Dikirim pada: {{ my_vote.submitted_at|date:"d M Y, H:i" }} WIB</p>
+        <p class="mb-1 text-xs font-semibold text-sky-800">{{ seat.kode }} · {{ seat.nama_jabatan }}</p>
+        <h1 id="voting-title" class="text-2xl font-bold leading-tight text-slate-900">Pilih {{ sesi.nilai_k }} lokasi prioritas</h1>
+        <p class="mt-1 text-sm text-slate-600">{{ sesi.judul }}</p>
       </div>
-      <a href="{% url 'session-list' %}" class="px-4 py-2 text-xs font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors">
-        Kembali ke Beranda
-      </a>
+      {% if sesi.deadline_aktif %}
+      <p class="w-fit border-l-4 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        Tenggat voting: <time datetime="{{ sesi.deadline_aktif|date:'c' }}">{{ sesi.deadline_aktif|date:"d M Y, H:i" }} WIB</time>
+      </p>
+      {% endif %}
     </div>
+  </div>
 
+  {% if my_vote %}
+  <section class="border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="submitted-title">
+    <p class="mb-2 text-sm font-semibold text-emerald-800">Surat suara tersimpan dan tersegel</p>
+    <h2 id="submitted-title" class="text-lg font-bold text-slate-900">Pilihan Anda tercatat</h2>
+    <p class="mt-1 text-sm text-slate-600">Dikirim {{ my_vote.submitted_at|date:"d M Y, H:i" }} WIB.</p>
     {% if my_vote.abstain %}
-    <p class="text-xs text-slate-600 italic">Anda memilih untuk <strong>Abstain</strong> pada putaran voting ini.</p>
+    <p class="mt-6 border-l-4 border-slate-400 bg-slate-50 px-4 py-3 text-sm text-slate-700">Anda memilih abstain. Surat suara ini tidak memberi poin kepada lokasi.</p>
     {% else %}
-    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Urutan Pilihan Top-{{ sesi.nilai_k }} Anda:</h3>
-    <ol class="space-y-2 text-xs text-slate-800">
+    <ol class="mt-6 divide-y divide-slate-200 border-y border-slate-200">
       {% for item in my_vote.items.all %}
-      <li class="flex items-center space-x-3 p-2.5 bg-slate-50 rounded border border-slate-200">
-        <span class="font-bold text-sky-800 w-24">Peringkat #{{ item.peringkat }}</span>
-        <span class="font-semibold text-slate-900">{{ item.lokasi.kode }}</span>
-        <span class="text-slate-600">- {{ item.lokasi.nama }} ({{ item.lokasi.wilayah }})</span>
+      <li class="flex gap-4 py-3">
+        <span class="w-24 shrink-0 text-sm font-semibold text-sky-800">Peringkat {{ item.peringkat }}</span>
+        <span class="text-sm text-slate-800"><strong>{{ item.lokasi.kode }}</strong> · {{ item.lokasi.nama }}, {{ item.lokasi.wilayah }}</span>
       </li>
       {% endfor %}
     </ol>
     {% endif %}
+    <a href="{% url 'session-list' %}" class="mt-6 inline-flex min-h-11 items-center border border-slate-300 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Kembali ke beranda sesi</a>
+  </section>
+
+  {% elif sesi.status == 'VOTING' %}
+  <div class="mb-6 border-l-4 border-sky-700 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950">
+    Pilih tepat {{ sesi.nilai_k }} lokasi dan urutkan menurut prioritas Anda. Peringkat pertama memperoleh {{ sesi.nilai_k }} poin Borda; setiap peringkat berikutnya mendapat satu poin lebih sedikit. Rekomendasi WP hanya bahan pertimbangan.
   </div>
 
-  {% else %}
-
-  {# ─── Petunjuk & Bantuan Salin Rekomendasi ───────────────────── #}
-  <div class="bg-sky-50 rounded-lg border border-sky-200 p-4 mb-6 text-xs text-sky-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div>
-      <span class="font-bold">Ketentuan Voting:</span>
-      Pilih tepat <strong>{{ sesi.nilai_k }} lokasi berbeda</strong> untuk mengisi urutan prioritas rekonstruksi. Bobot poin Borda: Peringkat 1 mendapat {{ sesi.nilai_k }} poin, menurun hingga 1 poin pada Peringkat {{ sesi.nilai_k }}.
-    </div>
-
-    {# Tombol Bantu: Salin Rekomendasi WP #}
-    <button type="button"
-            id="btn-copy-wp"
-            data-wp-top-k="{% for r in wp_results %}{% if forloop.counter <= sesi.nilai_k %}{{ r.lokasi_id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}"
-            class="px-3.5 py-1.5 rounded bg-white text-sky-800 border border-sky-300 hover:bg-sky-100 font-semibold transition-colors shrink-0">
-      📋 Gunakan Urutan Rekomendasi WP
-    </button>
-  </div>
-
-  {# ─── Formulir Surat Suara Borda ────────────────────────────── #}
   <form id="voting-form" method="post" action="{% url 'submit-vote' session_id=sesi.id %}">
     {% csrf_token %}
     <input type="hidden" name="idempotency_token" value="{{ idempotency_token }}">
+    <input id="confirmed-password" type="hidden" name="password_konfirmasi">
 
-    {# Opsi Abstain #}
-    <div class="bg-white rounded-lg border border-slate-200 p-4 shadow-sm mb-6 flex items-center space-x-3">
-      <input type="checkbox"
-             id="abstain-checkbox"
-             name="abstain"
-             value="true"
-             class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
-      <label for="abstain-checkbox" class="text-xs text-slate-700 font-medium cursor-pointer">
-        Saya memilih untuk <strong>Abstain</strong> pada putaran voting konsensus ini (tidak memberikan poin ke lokasi manapun).
+    <fieldset class="mb-6">
+      <legend class="mb-3 text-sm font-bold text-slate-900">Urutan pilihan</legend>
+      <div class="divide-y divide-slate-200 border-y border-slate-200 bg-white">
+        {% for r in k_range %}
+        <div class="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:gap-6">
+          <label for="rank-{{ r }}" class="flex min-h-11 items-center gap-3 text-sm font-semibold text-slate-800 sm:w-52">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center border border-sky-800 text-sm font-bold text-sky-900">{{ r }}</span>
+            Prioritas ke-{{ r }}
+          </label>
+          <select name="rank_{{ r }}" id="rank-{{ r }}" required class="rank-select min-h-11 w-full border border-slate-300 bg-white px-3 text-sm text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 sm:flex-1">
+            <option value="">Pilih lokasi</option>
+            {% for loc in locations %}
+            <option value="{{ loc.id }}">{{ loc.kode }} · {{ loc.nama }} ({{ loc.wilayah }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endfor %}
+      </div>
+      <p id="ranking-error" class="mt-2 text-sm text-rose-800" role="alert" hidden>Setiap peringkat harus memakai lokasi yang berbeda.</p>
+    </fieldset>
+
+    <div class="mb-6 flex flex-col gap-3 border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">Pertimbangkan hasil kelompok</h2>
+        <p class="mt-1 text-sm text-slate-600">Menyalin urutan WP mengisi pilihan, lalu Anda tetap dapat mengubahnya.</p>
+      </div>
+      {% if wp_top_ids %}
+      <button type="button" id="copy-wp" data-wp-top-k="{{ wp_top_ids|join:',' }}" class="min-h-11 border border-sky-800 px-4 text-sm font-semibold text-sky-900 hover:bg-sky-50 active:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Salin urutan rekomendasi WP</button>
+      {% else %}
+      <p class="text-sm text-slate-500">Rekomendasi WP tidak tersedia.</p>
+      {% endif %}
+    </div>
+
+    <div class="mb-7 border border-slate-200 bg-white p-4">
+      <label for="abstain" class="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-slate-800">
+        <input id="abstain" type="checkbox" name="abstain" value="true" class="mt-1 h-4 w-4 accent-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">
+        <span><strong>Abstain</strong><span class="mt-1 block text-slate-600">Kirim suara tanpa memberi poin kepada lokasi. Pilihan peringkat akan dinonaktifkan.</span></span>
       </label>
     </div>
 
-    {# Matriks Pilihan Peringkat 1 s.d. K #}
-    <div id="ranking-container" class="bg-white rounded-lg border border-slate-200 shadow-sm p-6 mb-6 space-y-4">
-      <h2 class="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3">
-        Penetapan Urutan Peringkat 1 s.d. {{ sesi.nilai_k }}
-      </h2>
-
-      {% for r in k_range %}
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-50 rounded border border-slate-200">
-        <label for="rank-{{ r }}" class="text-xs font-bold text-slate-800 sm:w-44">
-          Peringkat Prioritas ke-{{ r }}:
-        </label>
-        <select name="rank_{{ r }}"
-                id="rank-{{ r }}"
-                required
-                class="rank-select w-full sm:w-80 text-xs rounded border border-slate-300 p-2 focus:ring-2 focus:ring-sky-500 focus:outline-none bg-white">
-          <option value="">-- Pilih Lokasi Kandidat --</option>
-          {% for loc in locations %}
-          <option value="{{ loc.id }}">{{ loc.kode }} - {{ loc.nama }} ({{ loc.wilayah }})</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endfor %}
-    </div>
-
-    {# ─── Konfirmasi Kata Sandi & Submit ────────────────────────── #}
-    <div class="bg-white rounded-lg border border-slate-200 p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div>
-        <h3 class="text-sm font-semibold text-slate-900">Konfirmasi Pengiriman Surat Suara</h3>
-        <p class="text-xs text-slate-500 mt-0.5">
-          Surat suara bersifat rahasia dan akan disegel permanen. Masukkan kata sandi akun untuk verifikasi.
-        </p>
-      </div>
-
-      <div class="flex items-center space-x-3">
-        <input type="password"
-               name="password_konfirmasi"
-               required
-               placeholder="Kata sandi akun"
-               class="px-3 py-2 text-xs rounded border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-               autocomplete="current-password">
-
-        <button type="submit"
-                id="btn-submit-vote"
-                class="px-5 py-2 text-xs font-semibold rounded bg-sky-700 text-white hover:bg-sky-800 focus:ring-2 focus:ring-sky-500 focus:outline-none transition-colors">
-          Kirim Surat Suara
-        </button>
-      </div>
+    <div class="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+      <p class="max-w-xl text-sm leading-relaxed text-slate-600">Suara tidak dapat diubah setelah dikirim. Anda akan diminta meninjau ringkasan dan mengonfirmasi dengan kata sandi.</p>
+      <button type="submit" class="min-h-11 bg-sky-800 px-5 text-sm font-semibold text-white hover:bg-sky-900 active:bg-sky-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Tinjau pilihan</button>
     </div>
   </form>
+
+  <dialog id="vote-confirmation" aria-labelledby="confirmation-title" aria-describedby="confirmation-description" class="w-[min(32rem,calc(100%-2rem))] border-0 p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/50">
+    <div class="border-t-4 border-sky-800 bg-white p-5 sm:p-7">
+      <p class="text-xs font-semibold text-sky-800">Konfirmasi surat suara</p>
+      <h2 id="confirmation-title" class="mt-1 text-xl font-bold">Periksa urutan pilihan</h2>
+      <p id="confirmation-description" class="mt-2 text-sm leading-relaxed text-slate-600">Setelah dikirim, surat suara akan tersegel dan tidak dapat diubah.</p>
+      <ol id="confirmation-summary" class="my-5 divide-y divide-slate-200 border-y border-slate-200 text-sm"></ol>
+      <p id="confirmation-error" class="mb-3 text-sm text-rose-800" role="alert" hidden>Masukkan kata sandi untuk mengirim surat suara.</p>
+      <label for="confirmation-password" class="block text-sm font-semibold text-slate-800">Kata sandi akun</label>
+      <input id="confirmation-password" type="password" autocomplete="current-password" class="mt-2 min-h-11 w-full border border-slate-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">
+      <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" id="cancel-confirmation" class="min-h-11 border border-slate-300 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Kembali ke pilihan</button>
+        <button type="button" id="confirm-vote" class="min-h-11 bg-sky-800 px-4 text-sm font-semibold text-white hover:bg-sky-900 active:bg-sky-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Kirim surat suara</button>
+      </div>
+    </div>
+  </dialog>
+
+  {% else %}
+  <section class="border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="closed-title">
+    <p class="text-sm font-semibold text-slate-600">Voting ditutup</p>
+    <h2 id="closed-title" class="mt-1 text-lg font-bold text-slate-900">Sesi tidak menerima surat suara baru</h2>
+    <p class="mt-2 text-sm text-slate-600">Status sesi: {{ sesi.get_status_display }}.</p>
+    <a href="{% url 'session-list' %}" class="mt-6 inline-flex min-h-11 items-center border border-slate-300 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">Kembali ke beranda sesi</a>
+  </section>
   {% endif %}
-</main>
+</section>
+{% endblock %}
 
-{# ─── Script Bantuan Form Voting (Client Logic) ────────────────── #}
+{% block extra_js %}
+{% if sesi.status == 'VOTING' and not my_vote %}
 <script>
-(function() {
-  'use strict';
-  const abstainBox = document.getElementById('abstain-checkbox');
-  const rankingContainer = document.getElementById('ranking-container');
-  const btnCopyWp = document.getElementById('btn-copy-wp');
-  const rankSelects = document.querySelectorAll('.rank-select');
+(() => {
+  const form = document.getElementById('voting-form');
+  const selects = [...document.querySelectorAll('.rank-select')];
+  const abstain = document.getElementById('abstain');
+  const rankingError = document.getElementById('ranking-error');
+  const dialog = document.getElementById('vote-confirmation');
+  const password = document.getElementById('confirmation-password');
+  const passwordField = document.getElementById('confirmed-password');
+  const passwordError = document.getElementById('confirmation-error');
+  const summary = document.getElementById('confirmation-summary');
+  let confirmed = false;
 
-  // Toggle Abstain
-  if (abstainBox) {
-    abstainBox.addEventListener('change', function() {
-      const isAbstain = this.checked;
-      rankSelects.forEach(sel => {
-        sel.disabled = isAbstain;
-        if (isAbstain) {
-          sel.required = false;
-        } else {
-          sel.required = true;
-        }
+  abstain.addEventListener('change', () => {
+    selects.forEach((select) => {
+      select.disabled = abstain.checked;
+      select.required = !abstain.checked;
+    });
+  });
+
+  const copyButton = document.getElementById('copy-wp');
+  if (copyButton) {
+    copyButton.addEventListener('click', () => {
+      abstain.checked = false;
+      abstain.dispatchEvent(new Event('change'));
+      const ranks = copyButton.dataset.wpTopK.split(',');
+      selects.forEach((select, index) => {
+        select.value = ranks[index] || '';
+        select.setCustomValidity('');
       });
-      if (rankingContainer) {
-        rankingContainer.style.opacity = isAbstain ? '0.5' : '1.0';
-      }
+      rankingError.hidden = true;
     });
   }
 
-  // 1-Klik Salin Rekomendasi WP
-  if (btnCopyWp) {
-    const rawIds = btnCopyWp.dataset.wpTopK || '';
-    const wpTopK = rawIds.split(',').filter(Boolean).map(id => parseInt(id.trim(), 10));
-
-    btnCopyWp.addEventListener('click', function() {
-      if (abstainBox && abstainBox.checked) {
-        abstainBox.checked = false;
-        abstainBox.dispatchEvent(new Event('change'));
-      }
-
-      rankSelects.forEach((sel, index) => {
-        if (index < wpTopK.length) {
-          sel.value = wpTopK[index];
-        }
-      });
-    });
-  }
-
-  // Cegah duplikasi pilihan antar dropdown
-  rankSelects.forEach(currentSel => {
-    currentSel.addEventListener('change', function() {
-      const currentVal = this.value;
-      if (!currentVal) return;
-
-      rankSelects.forEach(otherSel => {
-        if (otherSel !== currentSel && otherSel.value === currentVal) {
-          alert('Lokasi ini sudah dipilih pada peringkat lain. Harap pilih lokasi yang berbeda.');
-          currentSel.value = '';
+  selects.forEach((select) => {
+    select.addEventListener('change', () => {
+      const selected = selects.map((item) => item.value).filter(Boolean);
+      const hasDuplicates = selected.length !== new Set(selected).size;
+      rankingError.hidden = !hasDuplicates;
+      select.setCustomValidity(hasDuplicates ? 'Lokasi yang sama tidak dapat dipilih lebih dari sekali.' : '');
+      selects.forEach((item) => {
+        if (item !== select) {
+          item.setCustomValidity('');
         }
       });
     });
   });
+
+  form.addEventListener('submit', (event) => {
+    if (confirmed) {
+      return;
+    }
+    event.preventDefault();
+    summary.replaceChildren();
+
+    if (abstain.checked) {
+      const item = document.createElement('li');
+      item.className = 'py-3 font-semibold';
+      item.textContent = 'Abstain · tidak memberi poin kepada lokasi';
+      summary.append(item);
+    } else {
+      for (const [index, select] of selects.entries()) {
+        const option = select.selectedOptions[0];
+        const item = document.createElement('li');
+        item.className = 'flex gap-4 py-3';
+        const rank = document.createElement('span');
+        rank.className = 'w-28 shrink-0 font-semibold text-sky-900';
+        rank.textContent = `Peringkat ${index + 1}`;
+        const location = document.createElement('span');
+        location.textContent = option.textContent;
+        item.append(rank, location);
+        summary.append(item);
+      }
+    }
+
+    passwordError.hidden = true;
+    dialog.showModal();
+    password.focus();
+  });
+
+  document.getElementById('cancel-confirmation').addEventListener('click', () => {
+    password.value = '';
+    dialog.close();
+  });
+
+  document.getElementById('confirm-vote').addEventListener('click', () => {
+    if (!password.value.trim()) {
+      passwordError.hidden = false;
+      password.focus();
+      return;
+    }
+    passwordField.value = password.value;
+    confirmed = true;
+    dialog.close();
+    form.requestSubmit();
+  });
+
+  dialog.addEventListener('close', () => {
+    if (!confirmed) {
+      password.value = '';
+    }
+  });
 })();
 </script>
+{% endif %}
 {% endblock %}
